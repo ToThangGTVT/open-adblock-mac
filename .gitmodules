@@ -1,0 +1,4 @@
+[submodule "open-adblock-core"]
+	path = open-adblock-core
+	url = https://github.com/ToThangGTVT/open-adblock-core.git
+	branch = main

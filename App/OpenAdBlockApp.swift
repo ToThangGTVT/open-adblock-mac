@@ -1,0 +1,50 @@
+import SwiftUI
+
+@main
+struct OpenAdBlockApp: App {
+    @StateObject private var tunnel = TunnelManager()
+    @StateObject private var store = SettingsStore()
+
+    var body: some Scene {
+        WindowGroup("Open AdBlock", id: "main") {
+            ContentView()
+                .environmentObject(tunnel)
+                .environmentObject(store)
+                .frame(minWidth: 760, minHeight: 520)
+                .task {
+                    store.onChange = { tunnel.reload() }
+                    await store.downloadMissing()
+                }
+        }
+        .windowResizability(.contentMinSize)
+
+        MenuBarExtra {
+            MenuBarContent()
+                .environmentObject(tunnel)
+        } label: {
+            Image(systemName: tunnel.state.isOn ? "shield.lefthalf.filled" : "shield.slash")
+        }
+    }
+}
+
+private struct MenuBarContent: View {
+    @EnvironmentObject private var tunnel: TunnelManager
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Text(tunnel.state.isOn ? "Protection is on" : "Protection is off")
+        if let status = tunnel.status, tunnel.state == .on {
+            Text("\(status.todayBlocked.formatted()) blocked today")
+        }
+        Divider()
+        Button(tunnel.state.isOn ? "Turn Off" : "Turn On") {
+            tunnel.setEnabled(!tunnel.state.isOn)
+        }
+        Button("Open Open AdBlock") {
+            openWindow(id: "main")
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        Divider()
+        Button("Quit") { NSApp.terminate(nil) }
+    }
+}
