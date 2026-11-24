@@ -39,10 +39,10 @@ final class TunnelManager: ObservableObject {
         }
     }
 
-    func setEnabled(_ enabled: Bool) {
+    func setEnabled(_ enabled: Bool, settings: Settings) {
         Task {
             do {
-                if enabled { try await start() } else { manager?.connection.stopVPNTunnel() }
+                if enabled { try await start(settings) } else { manager?.connection.stopVPNTunnel() }
             } catch {
                 lastError = error.localizedDescription
                 refreshState()
@@ -50,24 +50,35 @@ final class TunnelManager: ObservableObject {
         }
     }
 
-    /// Applies saved settings and lists in the running tunnel.
-    func reload() { Task { await send(.reload) } }
+    /// Hands changed settings to the running tunnel, and to the VPN configuration so the next
+    /// start (also one the system triggers) uses them.
+    func apply(_ settings: Settings) {
+        Task {
+            await send(.apply, settings: settings)
+            if let manager, manager.connection.status != .invalid {
+                _ = try? await configuredManager(settings)
+            }
+        }
+    }
+
+    func updateLists() { Task { await send(.updateLists) } }
 
     func clearLog() { Task { await send(.clearLog) } }
 
-    private func start() async throws {
-        let manager = try await configuredManager()
+    private func start(_ settings: Settings) async throws {
+        let manager = try await configuredManager(settings)
         try manager.connection.startVPNTunnel()
         lastError = nil
     }
 
     /// Creates the VPN configuration on first use; the system asks the user to allow it once.
-    private func configuredManager() async throws -> NETunnelProviderManager {
+    private func configuredManager(_ settings: Settings) async throws -> NETunnelProviderManager {
         let manager = self.manager ?? NETunnelProviderManager()
         let configuration = NETunnelProviderProtocol()
         configuration.providerBundleIdentifier = AppGroup.tunnelBundleIdentifier
         configuration.serverAddress = "Open AdBlock"
         configuration.disconnectOnSleep = false
+        configuration.providerConfiguration = [AppGroup.settingsKey: settings.encoded()]
         manager.protocolConfiguration = configuration
         manager.localizedDescription = "Open AdBlock"
         manager.isEnabled = true
@@ -122,10 +133,10 @@ final class TunnelManager: ObservableObject {
         poller = nil
     }
 
-    private func send(_ command: TunnelCommand) async {
+    private func send(_ command: TunnelCommand, settings: Settings? = nil) async {
         guard let session = manager?.connection as? NETunnelProviderSession,
             session.status == .connected,
-            let request = try? JSONEncoder().encode(TunnelRequest(command: command))
+            let request = try? JSONEncoder().encode(TunnelRequest(command: command, settings: settings))
         else { return }
         let reply: Data? = await withCheckedContinuation { continuation in
             do {

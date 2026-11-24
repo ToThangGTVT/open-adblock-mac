@@ -1,7 +1,8 @@
 # Open AdBlock for macOS
 
 System-wide ad and tracker blocking for macOS, built with SwiftUI and a Network Extension
-packet tunnel. The filtering engine is the same Rust core as the
+packet tunnel shipped as a **system extension** (distributable with Developer ID, outside the Mac
+App Store). The filtering engine is the same Rust core as the
 [Android app](https://github.com/ToThangGTVT/open-adblock):
 [open-adblock-core](https://github.com/ToThangGTVT/open-adblock-core), pinned here as a git
 submodule on its `main` branch.
@@ -20,19 +21,26 @@ submodule on its `main` branch.
 ## How it works
 
 ```
-SwiftUI app ──settings.json / lists (App Group)──▶ PacketTunnel.appex
-     │  sendProviderMessage(status | reload | clearLog)        │
-     └───────────────────────────────────────────────────────▶ │ NEPacketTunnelProvider
-                                                               │   packetFlow ⇄ NativeEngine.startPackets
-                                                               ▼
-                                         OpenAdBlockCore (Swift) → libopenadblock (Rust, static)
+SwiftUI app (user)                                  system extension (root)
+  ExtensionInstaller ── OSSystemExtensionRequest ─▶ io.github…mac.tunnel.systemextension
+  TunnelManager ── providerConfiguration{settings} ─▶ NEPacketTunnelProvider
+               ── sendProviderMessage(status | apply | updateLists | clearLog) ─▶
+                                                       packetFlow ⇄ NativeEngine.startPackets
+                                                       FilterLists (downloads, own container)
+                                                       ▼
+                                     OpenAdBlockCore (Swift) → libopenadblock (Rust, static)
 ```
 
-- `App/` — SwiftUI window, menu bar extra, `TunnelManager` (NETunnelProviderManager + polling),
-  `SettingsStore` (settings and list downloads).
-- `PacketTunnel/` — `PacketTunnelProvider` runs the core in packet mode; `EventStore` keeps the
+- `App/` — SwiftUI window, menu bar extra, `ExtensionInstaller` (activates the system
+  extension), `TunnelManager` (NETunnelProviderManager, settings hand-off, status polling),
+  `SettingsStore`.
+- `PacketTunnel/` — `main.swift` starts system-extension mode; `PacketTunnelProvider` runs the
+  core in packet mode; `FilterLists` downloads lists (refreshed daily); `EventStore` keeps the
   query log and today's statistics.
 - `Shared/` — settings, filter catalog and the app ↔ tunnel messages, compiled into both targets.
+- The extension runs as root, so it shares no files with the app. Settings travel in the VPN
+  configuration (used when the system starts the tunnel) and in `apply` messages; the newest
+  `revision` wins. The extension keeps running when the app quits or crashes.
 - The tunnel answers DNS at `172.19.0.2` / `fdfe:dcba:9876::2`, the virtual addresses the core
   recognises. The extension's own sockets bypass the tunnel and are bound to the physical
   interface.
@@ -52,7 +60,16 @@ open OpenAdBlock.xcodeproj                  # or:
 xcodebuild -scheme OpenAdBlock -allowProvisioningUpdates build
 ```
 
-Run the app, turn protection on and allow the VPN configuration when macOS asks.
+System extensions only activate from `/Applications`:
+
+```bash
+ditto "build/Build/Products/Debug/Open AdBlock.app" "/Applications/Open AdBlock.app"
+open "/Applications/Open AdBlock.app"
+```
+
+On first launch approve the extension in System Settings › General › Login Items & Extensions
+› Network Extensions (the app shows a banner with a shortcut), then turn protection on and allow
+the VPN configuration. `systemextensionsctl list` shows the extension's state.
 
 To compile without signing (CI, quick checks):
 
@@ -68,11 +85,23 @@ scripts/build-core.sh
 git add open-adblock-core && git commit -m "Update open-adblock-core"
 ```
 
-## Distribution notes
+## Distribution (Developer ID)
 
-This is the App Store–style packaging (sandboxed app + app extension). Distributing outside the
-Mac App Store with Developer ID requires turning the extension into a system extension
-(`packet-tunnel-provider-systemextension`); the provider code stays the same.
+`OAB_NE_PROVIDER` in `Config/Base.xcconfig` picks the Network Extension entitlement value:
+`packet-tunnel-provider` for Debug (Apple Development profiles only allow this one) and
+`packet-tunnel-provider-systemextension` for Release (required by Developer ID profiles).
+
+```bash
+xcodebuild -scheme OpenAdBlock -configuration Release -archivePath build/OpenAdBlock.xcarchive \
+    -allowProvisioningUpdates archive
+xcodebuild -exportArchive -archivePath build/OpenAdBlock.xcarchive -exportPath build/export \
+    -exportOptionsPlist ExportOptions.plist     # method: developer-id
+xcrun notarytool submit "build/export/Open AdBlock.app.zip" --keychain-profile <profile> --wait
+xcrun stapler staple "build/export/Open AdBlock.app"
+```
+
+To remove the extension during development: `systemextensionsctl uninstall <TEAM_ID>
+io.github.tothanggtvt.openadblock.mac.tunnel` (or delete the app from /Applications).
 
 ## Not yet
 

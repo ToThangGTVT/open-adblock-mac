@@ -21,6 +21,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private let engine = NativeEngine.shared
     private let events = EventStore()
     private let protector = InterfaceProtector()
+    private let lists = FilterLists()
     private var settings = Settings.load()
     private var report = RuleReport(loaded: 0, ignored: 0, errors: [])
     private var startedAt: Date?
@@ -32,7 +33,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         guard let engine else {
             throw NEVPNError(.configurationInvalid)
         }
-        settings = Settings.load()
+        settings = newestSettings()
+        try? settings.save()
         apply(settings, to: engine)
         try await setTunnelNetworkSettings(networkSettings())
 
@@ -45,6 +47,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         reading = true
         readPackets()
         watchNetwork()
+        refreshLists(lists.stale(settings.enabledLists))
         logger.info("Tunnel started, core \(engine.version, privacy: .public), \(self.report.loaded) rules")
     }
 
@@ -62,11 +65,17 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             return nil
         }
         switch request.command {
-        case .reload:
-            settings = Settings.load()
+        case .apply:
+            guard let new = request.settings else { break }
+            let ipv6Changed = new.ipv6 != settings.ipv6
+            settings = new
+            try? settings.save()
             if let engine { apply(settings, to: engine) }
             // IPv6 routes and DNS servers depend on settings too.
-            try? await setTunnelNetworkSettings(networkSettings())
+            if ipv6Changed { try? await setTunnelNetworkSettings(networkSettings()) }
+            refreshLists(lists.stale(settings.enabledLists))
+        case .updateLists:
+            refreshLists(lists.stale(settings.enabledLists, force: true))
         case .clearLog:
             events.clear()
         case .status:
@@ -83,14 +92,30 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             logger.error("DNS configuration rejected")
         }
         engine.configurePolicy(json: settings.policyJSON)
-        var lists = ""
-        for list in settings.lists where list.enabled {
-            if let text = try? String(contentsOf: AppGroup.listURL(list.id), encoding: .utf8) {
-                lists += text
-                lists += "\n"
-            }
+        report = engine.replaceRules(
+            dns: lists.text(for: settings.enabledLists), browser: "", custom: settings.customRules,
+            apply: true)
+    }
+
+    /// The VPN configuration carries the settings of the last start; the tunnel's own copy may be
+    /// newer when the app applied changes while it was running.
+    private func newestSettings() -> Settings {
+        let stored = Settings.load()
+        let configured = ((protocolConfiguration as? NETunnelProviderProtocol)?
+            .providerConfiguration?[AppGroup.settingsKey] as? Data)
+            .flatMap(Settings.decode)
+        guard let configured else { return stored }
+        return configured.revision >= stored.revision ? configured : stored
+    }
+
+    /// Downloads lists in the background, then recompiles the rules with them.
+    private func refreshLists(_ ids: [String]) {
+        guard !ids.isEmpty else { return }
+        Task { [weak self] in
+            guard let self, await self.lists.download(ids), let engine = self.engine else { return }
+            self.apply(self.settings, to: engine)
+            logger.info("Lists updated, \(self.report.loaded) rules")
         }
-        report = engine.replaceRules(dns: lists, browser: "", custom: settings.customRules, apply: true)
     }
 
     private func status() -> TunnelStatus {
@@ -100,7 +125,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             engineVersion: engine?.version ?? "unavailable",
             rulesLoaded: report.loaded, ruleErrors: report.errors.count,
             todayTotal: today.total, todayBlocked: today.blocked, topBlocked: today.top,
-            recent: today.recent, packetsIn: counters.packetsIn, packetsOut: counters.packetsOut,
+            recent: today.recent, lists: lists.status(), packetsIn: counters.packetsIn, packetsOut: counters.packetsOut,
             tcpBytesUp: counters.tcpBytesUp, tcpBytesDown: counters.tcpBytesDown,
             connections: counters.tcpOpened + counters.udpOpened, startedAt: startedAt)
     }

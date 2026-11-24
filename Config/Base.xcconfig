@@ -15,3 +15,8 @@ ENABLE_USER_SCRIPT_SANDBOXING = YES
 OAB_BUNDLE_PREFIX = io.github.tothanggtvt.openadblock.mac
 // macOS App Groups must start with the team ID; Xcode fills TeamIdentifierPrefix when signing.
 OAB_APP_GROUP = $(TeamIdentifierPrefix)$(OAB_BUNDLE_PREFIX)
+
+// The tunnel ships as a system extension. Apple Development profiles allow the plain value;
+// Developer ID distribution (Release) requires the -systemextension one.
+OAB_NE_PROVIDER = packet-tunnel-provider
+OAB_NE_PROVIDER[config=Release] = packet-tunnel-provider-systemextension

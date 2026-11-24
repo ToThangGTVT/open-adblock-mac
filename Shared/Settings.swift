@@ -53,13 +53,13 @@ struct Upstream: Codable, Equatable {
 struct FilterListSetting: Codable, Equatable, Identifiable {
     var id: String
     var enabled: Bool
-    var updated: Date?
-    var rules: Int?
 }
 
-/// Everything the user configures. Saved as JSON in the App Group container; the tunnel reads
-/// it on start and when the app sends `reload`.
+/// Everything the user configures. The app keeps it in its own storage and hands it to the tunnel
+/// in the VPN configuration (on start) and in `apply` messages (while running); the tunnel keeps
+/// the copy with the newest `revision`.
 struct Settings: Codable, Equatable {
+    var revision = Date(timeIntervalSince1970: 0)
     var dns: DNSPreset = .cloudflare
     var customUpstream = Upstream(protocol: .https, ip: "1.1.1.1", serverName: "cloudflare-dns.com")
     /// "zero" answers 0.0.0.0/::, "nxdomain" says the name does not exist.
@@ -98,9 +98,13 @@ struct Settings: Codable, Equatable {
     }
 
     static func load() -> Settings {
-        guard let data = try? Data(contentsOf: AppGroup.settingsURL),
-            var settings = try? JSONDecoder().decode(Settings.self, from: data)
+        guard let data = try? Data(contentsOf: AppGroup.settingsURL), let settings = decode(data)
         else { return Settings() }
+        return settings
+    }
+
+    static func decode(_ data: Data) -> Settings? {
+        guard var settings = try? JSONDecoder().decode(Settings.self, from: data) else { return nil }
         // Lists added to the catalog after the settings were saved.
         for list in FilterCatalog.all where !settings.lists.contains(where: { $0.id == list.id }) {
             settings.lists.append(FilterListSetting(id: list.id, enabled: list.enabledByDefault))
@@ -108,11 +112,17 @@ struct Settings: Codable, Equatable {
         return settings
     }
 
-    func save() throws {
+    func encoded() -> Data {
         let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(self).write(to: AppGroup.settingsURL, options: .atomic)
+        encoder.outputFormatting = [.sortedKeys]
+        return (try? encoder.encode(self)) ?? Data()
     }
+
+    func save() throws {
+        try encoded().write(to: AppGroup.settingsURL, options: .atomic)
+    }
+
+    var enabledLists: [String] { lists.filter(\.enabled).map(\.id) }
 }
 
 extension Settings {
@@ -120,6 +130,7 @@ extension Settings {
         // Every field optional so settings saved by an older version keep loading.
         let defaults = Settings()
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        revision = (try? c.decode(Date.self, forKey: .revision)) ?? defaults.revision
         dns = (try? c.decode(DNSPreset.self, forKey: .dns)) ?? defaults.dns
         customUpstream = (try? c.decode(Upstream.self, forKey: .customUpstream)) ?? defaults.customUpstream
         blockMode = (try? c.decode(String.self, forKey: .blockMode)) ?? defaults.blockMode

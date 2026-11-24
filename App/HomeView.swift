@@ -6,6 +6,7 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                ExtensionBanner()
                 ProtectionCard()
                 if let status = tunnel.status, tunnel.state == .on {
                     HStack(spacing: 16) {
@@ -30,8 +31,47 @@ struct HomeView: View {
     }
 }
 
+/// Shown until macOS has the system extension running.
+private struct ExtensionBanner: View {
+    @EnvironmentObject private var installer: ExtensionInstaller
+
+    var body: some View {
+        switch installer.state {
+        case .ready, .unknown, .activating:
+            EmptyView()
+        case .needsApproval:
+            banner(
+                "Allow the Open AdBlock extension",
+                "macOS needs your approval once: System Settings › General › Login Items & Extensions › Network Extensions.",
+                button: "Open System Settings"
+            ) { installer.openApprovalSettings() }
+        case .failed(let message):
+            banner("The filtering extension could not be installed", message, button: "Try Again") {
+                installer.activate()
+            }
+        }
+    }
+
+    private func banner(_ title: String, _ detail: String, button: String, action: @escaping () -> Void)
+        -> some View
+    {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.title2)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.headline)
+                Text(detail).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button(button, action: action)
+        }
+        .padding(16)
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
 private struct ProtectionCard: View {
     @EnvironmentObject private var tunnel: TunnelManager
+    @EnvironmentObject private var store: SettingsStore
 
     private var subtitle: String {
         switch tunnel.state {
@@ -61,7 +101,8 @@ private struct ProtectionCard: View {
             Spacer()
             Toggle(
                 "Protection",
-                isOn: Binding(get: { tunnel.state.isOn }, set: { tunnel.setEnabled($0) })
+                isOn: Binding(
+                    get: { tunnel.state.isOn }, set: { tunnel.setEnabled($0, settings: store.settings) })
             )
             .toggleStyle(.switch)
             .controlSize(.large)

@@ -4,16 +4,19 @@ import SwiftUI
 struct OpenAdBlockApp: App {
     @StateObject private var tunnel = TunnelManager()
     @StateObject private var store = SettingsStore()
+    @StateObject private var installer = ExtensionInstaller()
 
     var body: some Scene {
         WindowGroup("Open AdBlock", id: "main") {
             ContentView()
                 .environmentObject(tunnel)
                 .environmentObject(store)
+                .environmentObject(installer)
                 .frame(minWidth: 760, minHeight: 520)
                 .task {
-                    store.onChange = { tunnel.reload() }
-                    await store.downloadMissing()
+                    store.onChange = { tunnel.apply($0) }
+                    // Installs or updates the bundled system extension on every launch.
+                    installer.activate()
                 }
         }
         .windowResizability(.contentMinSize)
@@ -21,6 +24,7 @@ struct OpenAdBlockApp: App {
         MenuBarExtra {
             MenuBarContent()
                 .environmentObject(tunnel)
+                .environmentObject(store)
         } label: {
             Image(systemName: tunnel.state.isOn ? "shield.lefthalf.filled" : "shield.slash")
         }
@@ -29,6 +33,7 @@ struct OpenAdBlockApp: App {
 
 private struct MenuBarContent: View {
     @EnvironmentObject private var tunnel: TunnelManager
+    @EnvironmentObject private var store: SettingsStore
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -38,7 +43,7 @@ private struct MenuBarContent: View {
         }
         Divider()
         Button(tunnel.state.isOn ? "Turn Off" : "Turn On") {
-            tunnel.setEnabled(!tunnel.state.isOn)
+            tunnel.setEnabled(!tunnel.state.isOn, settings: store.settings)
         }
         Button("Open Open AdBlock") {
             openWindow(id: "main")

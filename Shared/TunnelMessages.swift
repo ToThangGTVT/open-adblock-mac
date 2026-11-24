@@ -1,17 +1,20 @@
 import Foundation
 
-/// App → tunnel requests over `NETunnelProviderSession.sendProviderMessage`.
+/// App → tunnel requests over `NETunnelProviderSession.sendProviderMessage`. Every request is
+/// answered with a `TunnelStatus`.
 enum TunnelCommand: String, Codable {
-    /// Returns a `TunnelStatus`.
     case status
-    /// Re-read settings and lists from the App Group container and apply them.
-    case reload
+    /// Store and apply `TunnelRequest.settings` (downloads newly enabled lists).
+    case apply
+    /// Download every enabled list again.
+    case updateLists
     /// Forget the query log and today's numbers.
     case clearLog
 }
 
 struct TunnelRequest: Codable {
     var command: TunnelCommand
+    var settings: Settings?
 }
 
 /// One DNS answer or blocked connection.
@@ -31,6 +34,15 @@ struct DomainCount: Codable, Hashable, Identifiable {
     var id: String { domain }
 }
 
+/// A block list as the tunnel holds it.
+struct ListStatus: Codable, Hashable, Identifiable {
+    var id: String
+    var updated: Date?
+    var entries: Int
+    var downloading: Bool
+    var error: String?
+}
+
 struct TunnelStatus: Codable {
     var engineVersion: String
     var rulesLoaded: Int
@@ -39,6 +51,7 @@ struct TunnelStatus: Codable {
     var todayBlocked: Int
     var topBlocked: [DomainCount]
     var recent: [LogEntry]
+    var lists: [ListStatus]
     var packetsIn: Int64
     var packetsOut: Int64
     var tcpBytesUp: Int64
