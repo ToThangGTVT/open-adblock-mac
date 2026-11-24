@@ -2,8 +2,8 @@
 //   DEVELOPMENT_TEAM = ABCDE12345
 #include? "Local.xcconfig"
 
-MARKETING_VERSION = 0.1.0
-CURRENT_PROJECT_VERSION = 1
+MARKETING_VERSION = 0.2.0
+CURRENT_PROJECT_VERSION = 2
 MACOSX_DEPLOYMENT_TARGET = 14.0
 SDKROOT = macosx
 SWIFT_VERSION = 5.0
@@ -20,3 +20,6 @@ OAB_APP_GROUP = $(TeamIdentifierPrefix)$(OAB_BUNDLE_PREFIX)
 // Developer ID distribution (Release) requires the -systemextension one.
 OAB_NE_PROVIDER = packet-tunnel-provider
 OAB_NE_PROVIDER[config=Release] = packet-tunnel-provider-systemextension
+// Transparent proxy that hands browser connections to the core (browser filtering).
+OAB_NE_PROXY = app-proxy-provider
+OAB_NE_PROXY[config=Release] = app-proxy-provider-systemextension

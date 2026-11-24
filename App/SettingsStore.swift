@@ -29,4 +29,19 @@ final class SettingsStore: ObservableObject {
         guard let index = settings.lists.firstIndex(where: { $0.id == id }) else { return }
         settings.lists[index].enabled = enabled
     }
+
+    func add(_ list: FilterListSetting) {
+        guard !settings.lists.contains(where: { $0.id == list.id || $0.url == list.url }) else { return }
+        settings.lists.append(list)
+    }
+
+    func remove(_ id: String) {
+        settings.lists.removeAll { $0.id == id }
+    }
+
+    func setBrowser(_ id: String, enabled: Bool) {
+        var browsers = settings.https.browsers.filter { $0 != id }
+        if enabled { browsers.append(id) }
+        settings.https.browsers = browsers
+    }
 }

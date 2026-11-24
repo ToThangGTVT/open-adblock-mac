@@ -50,9 +50,25 @@ struct Upstream: Codable, Equatable {
     var path = "/dns-query"
 }
 
-struct FilterListSetting: Codable, Equatable, Identifiable {
+/// A block list the user subscribed to, from a catalog or by URL. DNS lists feed the domain
+/// matcher for every app; browser lists only apply to HTTPS the engine decrypts for browsers.
+struct FilterListSetting: Codable, Equatable, Identifiable, Hashable {
     var id: String
+    var name: String
+    var url: URL
+    var browser: Bool
     var enabled: Bool
+}
+
+/// Browser filtering: the system extension's transparent proxy hands only these apps' TCP 443
+/// connections to the core, which decrypts them with the local root CA.
+struct HTTPSSettings: Codable, Equatable {
+    var enabled = false
+    /// Bundle identifiers; helper processes (`com.google.Chrome.helper`) count as their browser.
+    var browsers: [String] = KnownBrowser.all.map(\.id)
+    /// SHA-256 of the root CA the app verified as trusted in the user's keychain. Decryption only
+    /// runs for that exact certificate, so a new or untrusted CA never breaks browsing.
+    var trustedCA: String?
 }
 
 /// Everything the user configures. The app keeps it in its own storage and hands it to the tunnel
@@ -67,10 +83,9 @@ struct Settings: Codable, Equatable {
     var ipv6 = true
     var logging = true
     var dpi = false
-    var lists: [FilterListSetting] = FilterCatalog.all.map {
-        FilterListSetting(id: $0.id, enabled: $0.enabledByDefault)
-    }
+    var lists: [FilterListSetting] = FilterCatalog.defaults
     var customRules = ""
+    var https = HTTPSSettings()
 
     var upstream: Upstream { dns.upstream ?? customUpstream }
 
@@ -92,6 +107,12 @@ struct Settings: Codable, Equatable {
         Self.json(["ipv6": ipv6, "dpi": ["enabled": dpi]])
     }
 
+    /// `configureHttps` JSON for the root CA with fingerprint `ca` (nil when none exists yet).
+    func httpsJSON(ca: String?) -> String {
+        let on = https.enabled && ca != nil && https.trustedCA == ca
+        return Self.json(["enabled": on, "apps": on ? https.browsers : []])
+    }
+
     private static func json(_ value: [String: Any]) -> String {
         let data = (try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])) ?? Data()
         return String(decoding: data, as: UTF8.self)
@@ -104,12 +125,7 @@ struct Settings: Codable, Equatable {
     }
 
     static func decode(_ data: Data) -> Settings? {
-        guard var settings = try? JSONDecoder().decode(Settings.self, from: data) else { return nil }
-        // Lists added to the catalog after the settings were saved.
-        for list in FilterCatalog.all where !settings.lists.contains(where: { $0.id == list.id }) {
-            settings.lists.append(FilterListSetting(id: list.id, enabled: list.enabledByDefault))
-        }
-        return settings
+        try? JSONDecoder().decode(Settings.self, from: data)
     }
 
     func encoded() -> Data {
@@ -122,7 +138,9 @@ struct Settings: Codable, Equatable {
         try encoded().write(to: AppGroup.settingsURL, options: .atomic)
     }
 
-    var enabledLists: [String] { lists.filter(\.enabled).map(\.id) }
+    func enabledLists(browser: Bool) -> [FilterListSetting] {
+        lists.filter { $0.enabled && $0.browser == browser }
+    }
 }
 
 extension Settings {
@@ -137,7 +155,9 @@ extension Settings {
         ipv6 = (try? c.decode(Bool.self, forKey: .ipv6)) ?? defaults.ipv6
         logging = (try? c.decode(Bool.self, forKey: .logging)) ?? defaults.logging
         dpi = (try? c.decode(Bool.self, forKey: .dpi)) ?? defaults.dpi
+        // Settings from 0.1 stored only ids of a fixed list; start those over with the defaults.
         lists = (try? c.decode([FilterListSetting].self, forKey: .lists)) ?? defaults.lists
         customRules = (try? c.decode(String.self, forKey: .customRules)) ?? defaults.customRules
+        https = (try? c.decode(HTTPSSettings.self, forKey: .https)) ?? defaults.https
     }
 }

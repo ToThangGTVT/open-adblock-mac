@@ -22,6 +22,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private let events = EventStore()
     private let protector = InterfaceProtector()
     private let lists = FilterLists()
+    private let certificates = CertificateStore()
     private var settings = Settings.load()
     private var report = RuleReport(loaded: 0, ignored: 0, errors: [])
     private var startedAt: Date?
@@ -47,13 +48,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         reading = true
         readPackets()
         watchNetwork()
-        refreshLists(lists.stale(settings.enabledLists))
+        refreshLists(force: false)
         logger.info("Tunnel started, core \(engine.version, privacy: .public), \(self.report.loaded) rules")
     }
 
     override func stopTunnel(with reason: NEProviderStopReason) async {
         reading = false
         pathMonitor.cancel()
+        SharedState.shared.update(browsers: [], decrypting: false)
         engine?.stop()
         engine?.setEventListener(nil)
         startedAt = nil
@@ -73,9 +75,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             if let engine { apply(settings, to: engine) }
             // IPv6 routes and DNS servers depend on settings too.
             if ipv6Changed { try? await setTunnelNetworkSettings(networkSettings()) }
-            refreshLists(lists.stale(settings.enabledLists))
+            refreshLists(force: false)
         case .updateLists:
-            refreshLists(lists.stale(settings.enabledLists, force: true))
+            refreshLists(force: true)
         case .clearLog:
             events.clear()
         case .status:
@@ -92,9 +94,24 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             logger.error("DNS configuration rejected")
         }
         engine.configurePolicy(json: settings.policyJSON)
+
+        // Browser filtering: the CA exists once the user turned it on; decryption only runs for
+        // the exact CA the app verified as trusted, so browsing never meets an unknown issuer.
+        let authority = certificates.load(create: settings.https.enabled, engine: engine)
+        if let authority {
+            engine.setRootCA(
+                signer: authority.signer, publicPoint: authority.publicPoint,
+                certificate: authority.certificate)
+        }
+        let decrypting = settings.https.enabled && authority != nil
+            && settings.https.trustedCA == authority?.fingerprint
+        engine.configureHTTPS(json: settings.httpsJSON(ca: authority?.fingerprint))
+        SharedState.shared.update(browsers: settings.https.browsers, decrypting: decrypting)
+
         report = engine.replaceRules(
-            dns: lists.text(for: settings.enabledLists), browser: "", custom: settings.customRules,
-            apply: true)
+            dns: lists.text(for: settings.enabledLists(browser: false)),
+            browser: settings.https.enabled ? lists.text(for: settings.enabledLists(browser: true)) : "",
+            custom: settings.customRules, apply: true)
     }
 
     /// The VPN configuration carries the settings of the last start; the tunnel's own copy may be
@@ -108,11 +125,18 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         return configured.revision >= stored.revision ? configured : stored
     }
 
-    /// Downloads lists in the background, then recompiles the rules with them.
-    private func refreshLists(_ ids: [String]) {
-        guard !ids.isEmpty else { return }
+    /// Downloads stale lists (browser lists and scriptlets only with browser filtering on) in the
+    /// background, then recompiles the rules with them.
+    private func refreshLists(force: Bool) {
+        let wanted = settings.enabledLists(browser: false)
+            + (settings.https.enabled ? settings.enabledLists(browser: true) : [])
+        let stale = lists.stale(wanted, force: force)
+        let resources = settings.https.enabled
+        guard !stale.isEmpty || resources else { return }
         Task { [weak self] in
-            guard let self, await self.lists.download(ids), let engine = self.engine else { return }
+            guard let self, let engine = self.engine else { return }
+            if resources { await self.lists.installResources(into: engine) }
+            guard !stale.isEmpty, await self.lists.download(stale) else { return }
             self.apply(self.settings, to: engine)
             logger.info("Lists updated, \(self.report.loaded) rules")
         }
@@ -125,7 +149,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             engineVersion: engine?.version ?? "unavailable",
             rulesLoaded: report.loaded, ruleErrors: report.errors.count,
             todayTotal: today.total, todayBlocked: today.blocked, topBlocked: today.top,
-            recent: today.recent, lists: lists.status(), packetsIn: counters.packetsIn, packetsOut: counters.packetsOut,
+            recent: today.recent, lists: lists.status(for: settings.lists),
+            certificate: certificates.authority?.certificate,
+            certificateFingerprint: certificates.authority?.fingerprint,
+            browserFlows: SharedState.shared.browserFlows, packetsIn: counters.packetsIn, packetsOut: counters.packetsOut,
             tcpBytesUp: counters.tcpBytesUp, tcpBytesDown: counters.tcpBytesDown,
             connections: counters.tcpOpened + counters.udpOpened, startedAt: startedAt)
     }

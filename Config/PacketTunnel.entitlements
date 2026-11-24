@@ -5,6 +5,7 @@
 	<key>com.apple.developer.networking.networkextension</key>
 	<array>
 		<string>$(OAB_NE_PROVIDER)</string>
+		<string>$(OAB_NE_PROXY)</string>
 	</array>
 	<key>com.apple.security.app-sandbox</key>
 	<true/>

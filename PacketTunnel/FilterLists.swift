@@ -1,14 +1,22 @@
 import Foundation
+import OpenAdBlockCore
 
-/// Downloads and stores the block lists inside the tunnel's own (root) container, and remembers
-/// when each was fetched. Lists older than a day are refreshed when the tunnel starts.
+/// Downloads and stores the subscribed block lists and the AdGuard scriptlet resources inside the
+/// extension's own (root) container. Anything older than a day is refreshed.
 final class FilterLists: @unchecked Sendable {
     private struct Entry: Codable {
         var updated: Date
         var entries: Int
     }
 
+    /// AdGuard Scriptlets resources for `##+js(...)` and `$redirect` rules (same as Android).
+    /// Major version pinned: same JSON formats, fixes arrive without an app update.
+    private static let resources: [(name: String, url: URL)] = [
+        ("scriptlets", URL(string: "https://cdn.jsdelivr.net/npm/@adguard/scriptlets@2/dist/scriptlets.corelibs.json")!),
+        ("redirects", URL(string: "https://cdn.jsdelivr.net/npm/@adguard/scriptlets@2/dist/redirects.json")!),
+    ]
     private static let maximumAge: TimeInterval = 24 * 60 * 60
+    private static let sizeLimit = 32 * 1024 * 1024
     private let lock = NSLock()
     private var index: [String: Entry]
     private var downloading: Set<String> = []
@@ -16,7 +24,7 @@ final class FilterLists: @unchecked Sendable {
     private let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 30
-        configuration.timeoutIntervalForResource = 120
+        configuration.timeoutIntervalForResource = 180
         return URLSession(configuration: configuration)
     }()
 
@@ -26,57 +34,80 @@ final class FilterLists: @unchecked Sendable {
             .flatMap { try? JSONDecoder().decode([String: Entry].self, from: $0) } ?? [:]
     }
 
-    /// Text of the enabled lists that are on disk, joined for the DNS matcher.
-    func text(for ids: [String]) -> String {
-        ids.compactMap { try? String(contentsOf: AppGroup.listURL($0), encoding: .utf8) }
+    /// Text of the given lists that are on disk, joined for the engine.
+    func text(for lists: [FilterListSetting]) -> String {
+        lists.compactMap { try? String(contentsOf: file($0.id), encoding: .utf8) }
             .joined(separator: "\n")
     }
 
-    /// Ids among `ids` that were never downloaded or are older than a day (or all with `force`).
-    func stale(_ ids: [String], force: Bool = false) -> [String] {
+    /// Lists never downloaded or older than a day (all of them with `force`).
+    func stale(_ lists: [FilterListSetting], force: Bool = false) -> [FilterListSetting] {
         lock.lock()
         defer { lock.unlock() }
-        return ids.filter { id in
-            guard !downloading.contains(id) else { return false }
-            guard !force, let entry = index[id] else { return true }
+        return lists.filter { list in
+            guard !downloading.contains(list.id) else { return false }
+            guard !force, let entry = index[list.id] else { return true }
             return Date().timeIntervalSince(entry.updated) > Self.maximumAge
         }
     }
 
-    /// Downloads `ids` one by one; returns true when at least one list changed on disk.
-    func download(_ ids: [String]) async -> Bool {
+    /// Downloads `lists` one by one; true when at least one changed on disk.
+    func download(_ lists: [FilterListSetting]) async -> Bool {
         var changed = false
-        for id in ids {
-            guard let list = FilterCatalog.list(id), begin(id) else { continue }
-            do {
-                let (data, response) = try await session.data(from: list.url)
-                guard (response as? HTTPURLResponse)?.statusCode == 200, !data.isEmpty else {
-                    throw URLError(.badServerResponse)
-                }
-                try data.write(to: AppGroup.listURL(id), options: .atomic)
-                finish(id, entry: Entry(updated: Date(), entries: Self.count(data)), error: nil)
-                changed = true
-            } catch {
-                finish(id, entry: nil, error: error.localizedDescription)
-            }
+        for list in lists {
+            if await fetch(id: list.id, from: list.url, count: true) { changed = true }
         }
         return changed
     }
 
-    func status() -> [ListStatus] {
+    /// Installs the scriptlet resources into the engine, downloading them when stale.
+    func installResources(into engine: NativeEngine) async {
+        let stale = lock.withLock {
+            Self.resources.contains { resource in
+                index[resource.name].map { Date().timeIntervalSince($0.updated) > Self.maximumAge } ?? true
+            }
+        }
+        if stale {
+            for resource in Self.resources {
+                _ = await fetch(id: resource.name, from: resource.url, count: false)
+            }
+        }
+        let text = Self.resources.map { (try? String(contentsOf: file($0.name), encoding: .utf8)) ?? "" }
+        if text.contains(where: { !$0.isEmpty }) {
+            _ = engine.setResources(scriptlets: text[0], redirects: text[1])
+        }
+    }
+
+    func status(for lists: [FilterListSetting]) -> [ListStatus] {
         lock.lock()
         defer { lock.unlock() }
-        return FilterCatalog.all.map { list in
+        return lists.map { list in
             ListStatus(
                 id: list.id, updated: index[list.id]?.updated, entries: index[list.id]?.entries ?? 0,
                 downloading: downloading.contains(list.id), error: errors[list.id])
         }
     }
 
-    private func begin(_ id: String) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return downloading.insert(id).inserted
+    private func file(_ id: String) -> URL {
+        // Ids are catalog keys ("dns:1") or URL hashes; keep file names plain.
+        AppGroup.listURL(id.replacingOccurrences(of: ":", with: "-"))
+    }
+
+    private func fetch(id: String, from url: URL, count: Bool) async -> Bool {
+        guard lock.withLock({ downloading.insert(id).inserted }) else { return false }
+        do {
+            let (data, response) = try await session.data(from: url)
+            guard (response as? HTTPURLResponse)?.statusCode == 200, !data.isEmpty else {
+                throw URLError(.badServerResponse)
+            }
+            guard data.count <= Self.sizeLimit else { throw URLError(.dataLengthExceedsMaximum) }
+            try data.write(to: file(id), options: .atomic)
+            finish(id, entry: Entry(updated: Date(), entries: count ? Self.count(data) : 0), error: nil)
+            return true
+        } catch {
+            finish(id, entry: nil, error: error.localizedDescription)
+            return false
+        }
     }
 
     private func finish(_ id: String, entry: Entry?, error: String?) {
@@ -96,6 +127,7 @@ final class FilterLists: @unchecked Sendable {
         String(decoding: data, as: UTF8.self).split(whereSeparator: \.isNewline).count { line in
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             return !trimmed.isEmpty && !trimmed.hasPrefix("!") && !trimmed.hasPrefix("#")
+                && !trimmed.hasPrefix("[")
         }
     }
 }

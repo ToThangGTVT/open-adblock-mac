@@ -16,6 +16,14 @@ final class TunnelManager: ObservableObject {
     @Published private(set) var state: State = .loading
     @Published private(set) var status: TunnelStatus?
     @Published private(set) var lastError: String?
+    /// State of the browser transparent proxy (browser filtering).
+    @Published private(set) var browserProxy: NEVPNStatus = .invalid
+
+    /// Latest settings, for the browser proxy decision.
+    private var settings = Settings.load()
+    private var proxyManager: NETransparentProxyManager?
+    private var proxyObserver: NSObjectProtocol?
+    private var proxyWanted: Bool?
 
     private var manager: NETunnelProviderManager?
     private var observer: NSObjectProtocol?
@@ -40,6 +48,7 @@ final class TunnelManager: ObservableObject {
     }
 
     func setEnabled(_ enabled: Bool, settings: Settings) {
+        self.settings = settings
         Task {
             do {
                 if enabled { try await start(settings) } else { manager?.connection.stopVPNTunnel() }
@@ -53,6 +62,7 @@ final class TunnelManager: ObservableObject {
     /// Hands changed settings to the running tunnel, and to the VPN configuration so the next
     /// start (also one the system triggers) uses them.
     func apply(_ settings: Settings) {
+        self.settings = settings
         Task {
             await send(.apply, settings: settings)
             if let manager, manager.connection.status != .invalid {
@@ -116,6 +126,62 @@ final class TunnelManager: ObservableObject {
         @unknown default: state = .off
         }
         if state == .on { startPolling() } else if state == .off { stopPolling() }
+        syncBrowserProxy()
+    }
+
+    /// Browser filtering runs only while protection is on, the user enabled it and the root CA
+    /// the extension holds is the one the app verified as trusted.
+    private func syncBrowserProxy() {
+        let https = settings.https
+        let wanted = state == .on && https.enabled && https.trustedCA != nil
+            && https.trustedCA == status?.certificateFingerprint
+        guard wanted != proxyWanted else { return }
+        proxyWanted = wanted
+        Task {
+            do {
+                let manager = try await browserProxyManager(create: wanted)
+                guard let manager else { return }
+                if wanted {
+                    if !manager.isEnabled {
+                        manager.isEnabled = true
+                        try await manager.saveToPreferences()
+                        try await manager.loadFromPreferences()
+                    }
+                    if [.disconnected, .invalid].contains(manager.connection.status) {
+                        try manager.connection.startVPNTunnel()
+                    }
+                } else {
+                    manager.connection.stopVPNTunnel()
+                }
+            } catch {
+                proxyWanted = nil
+                lastError = "Browser filtering: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func browserProxyManager(create: Bool) async throws -> NETransparentProxyManager? {
+        if let proxyManager { return proxyManager }
+        let existing = try await NETransparentProxyManager.loadAllFromPreferences().first
+        guard let manager = existing ?? (create ? NETransparentProxyManager() : nil) else { return nil }
+        if existing == nil {
+            let configuration = NETunnelProviderProtocol()
+            configuration.providerBundleIdentifier = AppGroup.tunnelBundleIdentifier
+            configuration.serverAddress = "Open AdBlock browser filtering"
+            manager.protocolConfiguration = configuration
+            manager.localizedDescription = "Open AdBlock browser filtering"
+            manager.isEnabled = true
+            try await manager.saveToPreferences()
+            try await manager.loadFromPreferences()
+        }
+        proxyManager = manager
+        proxyObserver = NotificationCenter.default.addObserver(
+            forName: .NEVPNStatusDidChange, object: manager.connection, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.browserProxy = manager.connection.status }
+        }
+        browserProxy = manager.connection.status
+        return manager
     }
 
     private func startPolling() {
@@ -147,6 +213,7 @@ final class TunnelManager: ObservableObject {
         }
         if let reply, let status = try? JSONDecoder().decode(TunnelStatus.self, from: reply) {
             self.status = status
+            syncBrowserProxy()
         }
     }
 }

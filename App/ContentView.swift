@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum SidebarItem: String, CaseIterable, Identifiable {
-    case home, log, filters, settings
+    case home, log, filters, browsers, settings
     var id: String { rawValue }
 
     var title: String {
@@ -9,6 +9,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .home: "Home"
         case .log: "Query Log"
         case .filters: "Filters"
+        case .browsers: "Browsers"
         case .settings: "Settings"
         }
     }
@@ -18,6 +19,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .home: "shield.lefthalf.filled"
         case .log: "list.bullet.rectangle"
         case .filters: "line.3.horizontal.decrease.circle"
+        case .browsers: "safari"
         case .settings: "gearshape"
         }
     }
@@ -37,6 +39,7 @@ struct ContentView: View {
             case .home: HomeView()
             case .log: QueryLogView()
             case .filters: FiltersView()
+            case .browsers: BrowsersView()
             case .settings: SettingsView()
             }
         }

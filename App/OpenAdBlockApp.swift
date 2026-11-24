@@ -5,6 +5,7 @@ struct OpenAdBlockApp: App {
     @StateObject private var tunnel = TunnelManager()
     @StateObject private var store = SettingsStore()
     @StateObject private var installer = ExtensionInstaller()
+    @StateObject private var catalogs = CatalogStore()
 
     var body: some Scene {
         WindowGroup("Open AdBlock", id: "main") {
@@ -12,9 +13,11 @@ struct OpenAdBlockApp: App {
                 .environmentObject(tunnel)
                 .environmentObject(store)
                 .environmentObject(installer)
+                .environmentObject(catalogs)
                 .frame(minWidth: 760, minHeight: 520)
                 .task {
                     store.onChange = { tunnel.apply($0) }
+                    tunnel.apply(store.settings)
                     // Installs or updates the bundled system extension on every launch.
                     installer.activate()
                 }

@@ -52,6 +52,11 @@ struct TunnelStatus: Codable {
     var topBlocked: [DomainCount]
     var recent: [LogEntry]
     var lists: [ListStatus]
+    /// DER of the local root CA, once browser filtering created it.
+    var certificate: Data?
+    var certificateFingerprint: String?
+    /// Browser connections handed to the core since the extension started.
+    var browserFlows: Int
     var packetsIn: Int64
     var packetsOut: Int64
     var tcpBytesUp: Int64
