@@ -44,27 +44,33 @@ jobs:
       - name: Signing mode
         id: mode
         # Signs only with every secret present; otherwise builds unsigned and lists what is missing.
+        # Notarization takes an App Store Connect API key (NOTARY_API_KEY, _KEY_ID, _ISSUER_ID) or
+        # an Apple ID with an app-specific password (NOTARY_APPLE_ID, NOTARY_PASSWORD).
         env:
           MACOS_DEVELOPER_ID_P12: ${{ secrets.MACOS_DEVELOPER_ID_P12 != '' }}
           MACOS_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_P12_PASSWORD != '' }}
           MACOS_APP_PROFILE: ${{ secrets.MACOS_APP_PROFILE != '' }}
           MACOS_TUNNEL_PROFILE: ${{ secrets.MACOS_TUNNEL_PROFILE != '' }}
-          NOTARY_API_KEY: ${{ secrets.NOTARY_API_KEY != '' }}
-          NOTARY_API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID != '' }}
-          NOTARY_API_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID != '' }}
+          API_KEY: ${{ secrets.NOTARY_API_KEY != '' && secrets.NOTARY_API_KEY_ID != '' && secrets.NOTARY_API_ISSUER_ID != '' }}
+          APPLE_ID: ${{ secrets.NOTARY_APPLE_ID != '' && secrets.NOTARY_PASSWORD != '' }}
         run: |
           missing=()
           for name in MACOS_DEVELOPER_ID_P12 MACOS_DEVELOPER_ID_P12_PASSWORD MACOS_APP_PROFILE \
-                      MACOS_TUNNEL_PROFILE NOTARY_API_KEY NOTARY_API_KEY_ID NOTARY_API_ISSUER_ID; do
+                      MACOS_TUNNEL_PROFILE; do
             [[ "${!name}" == true ]] || missing+=("$name")
           done
+          if [[ "$API_KEY" == true ]]; then notary=api-key
+          elif [[ "$APPLE_ID" == true ]]; then notary=apple-id
+          else missing+=("NOTARY_APPLE_ID+NOTARY_PASSWORD (or NOTARY_API_KEY+_KEY_ID+_ISSUER_ID)")
+          fi
           if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
             echo "signed=false" >> "$GITHUB_OUTPUT"; echo "Unsigned build (pull request)"
           elif (( ${#missing[@]} )); then
             echo "signed=false" >> "$GITHUB_OUTPUT"
             echo "::notice::Unsigned build; missing secrets: ${missing[*]}"
           else
-            echo "signed=true" >> "$GITHUB_OUTPUT"; echo "Developer ID signing"
+            echo "signed=true" >> "$GITHUB_OUTPUT"; echo "notary=$notary" >> "$GITHUB_OUTPUT"
+            echo "Developer ID signing, notarization with $notary"
           fi
 
       # The core pins its toolchain in rust-toolchain.toml; install it before cargo runs.
@@ -141,22 +147,29 @@ jobs:
       - name: Notarize
         if: steps.mode.outputs.signed == 'true'
         env:
+          NOTARY: ${{ steps.mode.outputs.notary }}
           API_KEY: ${{ secrets.NOTARY_API_KEY }}
           API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
           API_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID }}
+          APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
         run: |
-          KEY="$RUNNER_TEMP/AuthKey.p8"
-          echo "$API_KEY" | base64 --decode > "$KEY"
+          if [[ "$NOTARY" == api-key ]]; then
+            KEY="$RUNNER_TEMP/AuthKey.p8"
+            echo "$API_KEY" | base64 --decode > "$KEY"
+            auth=(--key "$KEY" --key-id "$API_KEY_ID" --issuer "$API_ISSUER_ID")
+          else
+            auth=(--apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$TEAM_ID")
+          fi
           ditto -c -k --keepParent "build/export/Open AdBlock.app" build/notarize.zip
-          xcrun notarytool submit build/notarize.zip --key "$KEY" --key-id "$API_KEY_ID" \
-            --issuer "$API_ISSUER_ID" --wait --timeout 30m --output-format json | tee build/notary.json
+          xcrun notarytool submit build/notarize.zip "${auth[@]}" --wait --timeout 30m \
+            --output-format json | tee build/notary.json
           status="$(plutil -extract status raw -o - build/notary.json)"
           if [[ "$status" != Accepted ]]; then
-            xcrun notarytool log "$(plutil -extract id raw -o - build/notary.json)" --key "$KEY" \
-              --key-id "$API_KEY_ID" --issuer "$API_ISSUER_ID" || true
+            xcrun notarytool log "$(plutil -extract id raw -o - build/notary.json)" "${auth[@]}" || true
             exit 1
           fi
-          rm "$KEY"
+          rm -f "$RUNNER_TEMP/AuthKey.p8"
           xcrun stapler staple "build/export/Open AdBlock.app"
           spctl --assess --type execute --verbose=2 "build/export/Open AdBlock.app"
 

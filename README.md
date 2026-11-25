@@ -118,8 +118,13 @@ exist; until then the release holds an unsigned build. One-time setup, team Quan
    *App Groups*. Xcode already registered both; check the capabilities.
 3. **Profiles** › **+** › *Developer ID* (macOS), one per App ID, with the Developer ID
    certificate. Download both `.provisionprofile` files.
-4. **Notarization key.** App Store Connect › Users and Access › Integrations › Team Keys › **+**
-   (role *Developer*). Download `AuthKey_<id>.p8` (only once) and note the Key ID and Issuer ID.
+4. **Notarization**, either way:
+   - *Apple ID*: account.apple.com › Sign-In and Security › App-Specific Passwords › **+**.
+     Secrets `NOTARY_APPLE_ID` (the Apple ID's email) and `NOTARY_PASSWORD`.
+   - *API key* (needs App Store Connect API access, requested once by the Account Holder):
+     App Store Connect › Users and Access › Integrations › Team Keys › **+** (role *Developer*).
+     Download `AuthKey_<id>.p8` (only once); secrets `NOTARY_API_KEY` (base64 of the file),
+     `NOTARY_API_KEY_ID`, `NOTARY_API_ISSUER_ID`.
 5. **Secrets** (`gh secret set NAME` without input asks for the value):
 
 ```bash
@@ -127,9 +132,8 @@ base64 -i DeveloperID.p12 | gh secret set MACOS_DEVELOPER_ID_P12
 gh secret set MACOS_DEVELOPER_ID_P12_PASSWORD
 base64 -i <app>.provisionprofile | gh secret set MACOS_APP_PROFILE
 base64 -i <tunnel>.provisionprofile | gh secret set MACOS_TUNNEL_PROFILE
-base64 -i AuthKey_<id>.p8 | gh secret set NOTARY_API_KEY
-gh secret set NOTARY_API_KEY_ID
-gh secret set NOTARY_API_ISSUER_ID
+gh secret set NOTARY_APPLE_ID
+gh secret set NOTARY_PASSWORD
 ```
 
 Then re-run the workflow (Actions › Build › Run workflow) or push. Pull requests always build
