@@ -1,8 +1,11 @@
 name: Build
 
+# Pull requests: build only. Pushes to main: build and refresh the `nightly` pre-release.
+# Tags vX.Y.Z: build that version and publish it as release vX.Y.Z.
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -17,10 +20,23 @@ jobs:
   macos:
     runs-on: macos-15
     timeout-minutes: 45
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$(sed -n 's/^MARKETING_VERSION = //p' Config/Base.xcconfig)"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Version $version, build $GITHUB_RUN_NUMBER"
 
       # The core pins its toolchain in rust-toolchain.toml; install it before cargo runs.
       - name: Rust toolchain
@@ -42,6 +58,8 @@ jobs:
         run: |
           xcodebuild -version
           xcodebuild -scheme OpenAdBlock -configuration Release -derivedDataPath build \
+            MARKETING_VERSION="${{ steps.version.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
             CODE_SIGNING_ALLOWED=NO build
 
       - name: Package
@@ -54,3 +72,44 @@ jobs:
           name: OpenAdBlock-unsigned
           path: build/OpenAdBlock-unsigned.zip
           if-no-files-found: error
+
+  release:
+    needs: macos
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.macos.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: OpenAdBlock-unsigned
+
+      - name: Name the download
+        run: mv OpenAdBlock-unsigned.zip "OpenAdBlock-$VERSION-$GITHUB_RUN_NUMBER-unsigned.zip"
+
+      - name: Notes
+        run: |
+          cat > notes.md <<NOTES
+          Version $VERSION (build $GITHUB_RUN_NUMBER), commit $GITHUB_SHA.
+
+          **Unsigned build.** macOS only activates the system extension of an app signed with a
+          Developer ID and notarized, so this download is for checking the build, not for
+          everyday use. Apple silicon only.
+          NOTES
+
+      - name: Publish release (tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          gh release create "$GITHUB_REF_NAME" OpenAdBlock-*-unsigned.zip \
+            --title "Open AdBlock $VERSION" --notes-file notes.md --verify-tag
+
+      - name: Refresh nightly pre-release (main)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          gh release delete nightly --cleanup-tag --yes || true
+          gh release create nightly OpenAdBlock-*-unsigned.zip --prerelease --target "$GITHUB_SHA" \
+            --title "Nightly $VERSION ($GITHUB_RUN_NUMBER)" --notes-file notes.md
