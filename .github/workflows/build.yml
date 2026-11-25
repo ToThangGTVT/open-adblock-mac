@@ -1,7 +1,9 @@
 name: Build
 
-# Pull requests: build only. Pushes to main: build and refresh the `nightly` pre-release.
-# Tags vX.Y.Z: build that version and publish it as release vX.Y.Z.
+# Pull requests: unsigned build only. Pushes (or manual runs) on main: build and refresh the `nightly`
+# pre-release. Tags vX.Y.Z: build that version and publish release vX.Y.Z.
+# Pushes are signed with Developer ID and notarized once the signing secrets exist (README,
+# "Signed releases"); without them the release carries an unsigned build. Apple silicon only.
 on:
   push:
     branches: [main]
@@ -19,9 +21,10 @@ concurrency:
 jobs:
   macos:
     runs-on: macos-15
-    timeout-minutes: 45
+    timeout-minutes: 60
     outputs:
       version: ${{ steps.version.outputs.version }}
+      signed: ${{ steps.mode.outputs.signed }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,6 +41,17 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Version $version, build $GITHUB_RUN_NUMBER"
 
+      - name: Signing mode
+        id: mode
+        env:
+          HAS_CERTIFICATE: ${{ secrets.MACOS_DEVELOPER_ID_P12 != '' }}
+        run: |
+          if [[ "$HAS_CERTIFICATE" == true && "$GITHUB_EVENT_NAME" != pull_request ]]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"; echo "Developer ID signing"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"; echo "Unsigned build"
+          fi
+
       # The core pins its toolchain in rust-toolchain.toml; install it before cargo runs.
       - name: Rust toolchain
         working-directory: open-adblock-core
@@ -52,30 +66,104 @@ jobs:
       - name: Build the core (COpenAdBlock.xcframework)
         run: scripts/build-core.sh
 
-      # Unsigned: Network Extensions need a team and provisioning profiles, so this build checks
-      # that everything compiles; it cannot activate its system extension.
       - name: Build the app (Release, unsigned)
+        if: steps.mode.outputs.signed != 'true'
         run: |
           xcodebuild -version
           xcodebuild -scheme OpenAdBlock -configuration Release -derivedDataPath build \
-            MARKETING_VERSION="${{ steps.version.outputs.version }}" \
-            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
-            CODE_SIGNING_ALLOWED=NO build
+            ARCHS=arm64 MARKETING_VERSION="${{ steps.version.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" CODE_SIGNING_ALLOWED=NO build
+          mkdir -p build/export
+          ditto "build/Build/Products/Release/Open AdBlock.app" "build/export/Open AdBlock.app"
+
+      - name: Install certificate and profiles
+        if: steps.mode.outputs.signed == 'true'
+        env:
+          P12: ${{ secrets.MACOS_DEVELOPER_ID_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_P12_PASSWORD }}
+          APP_PROFILE: ${{ secrets.MACOS_APP_PROFILE }}
+          TUNNEL_PROFILE: ${{ secrets.MACOS_TUNNEL_PROFILE }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$KEYCHAIN" -P "$P12_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          rm "$RUNNER_TEMP/certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          security find-identity -v -p codesigning "$KEYCHAIN"
+          echo "KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+
+          install_profile() {  # base64 profile → installed file; prints its name, exports team id
+            local file="$RUNNER_TEMP/profile.provisionprofile" plist="$RUNNER_TEMP/profile.plist"
+            echo "$1" | base64 --decode > "$file"
+            security cms -D -i "$file" > "$plist"
+            local uuid name
+            uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$plist")"
+            name="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$plist")"
+            echo "TEAM_ID=$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$plist")" >> "$GITHUB_ENV"
+            for dir in "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" \
+                       "$HOME/Library/MobileDevice/Provisioning Profiles"; do
+              mkdir -p "$dir" && cp "$file" "$dir/$uuid.provisionprofile"
+            done
+            echo "$name"
+          }
+          echo "APP_PROFILE_NAME=$(install_profile "$APP_PROFILE")" >> "$GITHUB_ENV"
+          echo "TUNNEL_PROFILE_NAME=$(install_profile "$TUNNEL_PROFILE")" >> "$GITHUB_ENV"
+
+      - name: Archive and export (Developer ID)
+        if: steps.mode.outputs.signed == 'true'
+        run: |
+          xcodebuild -version
+          APP_PROFILE="$APP_PROFILE_NAME" TUNNEL_PROFILE="$TUNNEL_PROFILE_NAME" \
+            VERSION="${{ steps.version.outputs.version }}" BUILD="$GITHUB_RUN_NUMBER" \
+            scripts/archive.sh
+
+      - name: Notarize
+        if: steps.mode.outputs.signed == 'true'
+        env:
+          API_KEY: ${{ secrets.NOTARY_API_KEY }}
+          API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID }}
+        run: |
+          KEY="$RUNNER_TEMP/AuthKey.p8"
+          echo "$API_KEY" | base64 --decode > "$KEY"
+          ditto -c -k --keepParent "build/export/Open AdBlock.app" build/notarize.zip
+          xcrun notarytool submit build/notarize.zip --key "$KEY" --key-id "$API_KEY_ID" \
+            --issuer "$API_ISSUER_ID" --wait --timeout 30m --output-format json | tee build/notary.json
+          status="$(plutil -extract status raw -o - build/notary.json)"
+          if [[ "$status" != Accepted ]]; then
+            xcrun notarytool log "$(plutil -extract id raw -o - build/notary.json)" --key "$KEY" \
+              --key-id "$API_KEY_ID" --issuer "$API_ISSUER_ID" || true
+            exit 1
+          fi
+          rm "$KEY"
+          xcrun stapler staple "build/export/Open AdBlock.app"
+          spctl --assess --type execute --verbose=2 "build/export/Open AdBlock.app"
 
       - name: Package
         run: |
-          ditto -c -k --keepParent "build/Build/Products/Release/Open AdBlock.app" \
-            "build/OpenAdBlock-unsigned.zip"
+          suffix=$([[ "${{ steps.mode.outputs.signed }}" == true ]] && echo "" || echo "-unsigned")
+          ditto -c -k --keepParent "build/export/Open AdBlock.app" \
+            "build/OpenAdBlock-${{ steps.version.outputs.version }}-$GITHUB_RUN_NUMBER$suffix.zip"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: OpenAdBlock-unsigned
-          path: build/OpenAdBlock-unsigned.zip
+          name: OpenAdBlock
+          path: build/OpenAdBlock-*.zip
           if-no-files-found: error
+
+      - name: Remove signing keychain
+        if: always() && env.KEYCHAIN != ''
+        run: security delete-keychain "$KEYCHAIN" || true
 
   release:
     needs: macos
-    if: github.event_name == 'push'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -83,33 +171,33 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.macos.outputs.version }}
+      SIGNED: ${{ needs.macos.outputs.signed }}
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: OpenAdBlock-unsigned
-
-      - name: Name the download
-        run: mv OpenAdBlock-unsigned.zip "OpenAdBlock-$VERSION-$GITHUB_RUN_NUMBER-unsigned.zip"
+          name: OpenAdBlock
 
       - name: Notes
         run: |
-          cat > notes.md <<NOTES
-          Version $VERSION (build $GITHUB_RUN_NUMBER), commit $GITHUB_SHA.
-
-          **Unsigned build.** macOS only activates the system extension of an app signed with a
-          Developer ID and notarized, so this download is for checking the build, not for
-          everyday use. Apple silicon only.
-          NOTES
+          echo "Version $VERSION (build $GITHUB_RUN_NUMBER), commit $GITHUB_SHA. Apple silicon only." > notes.md
+          echo >> notes.md
+          if [[ "$SIGNED" == true ]]; then
+            echo "Signed with Developer ID and notarized. Move **Open AdBlock** to /Applications," >> notes.md
+            echo "open it and approve the system extension when macOS asks." >> notes.md
+          else
+            echo "**Unsigned build.** macOS only activates the system extension of an app signed" >> notes.md
+            echo "with a Developer ID and notarized, so this download only checks the build." >> notes.md
+          fi
 
       - name: Publish release (tag)
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          gh release create "$GITHUB_REF_NAME" OpenAdBlock-*-unsigned.zip \
+          gh release create "$GITHUB_REF_NAME" OpenAdBlock-*.zip \
             --title "Open AdBlock $VERSION" --notes-file notes.md --verify-tag
 
       - name: Refresh nightly pre-release (main)
         if: github.ref == 'refs/heads/main'
         run: |
           gh release delete nightly --cleanup-tag --yes || true
-          gh release create nightly OpenAdBlock-*-unsigned.zip --prerelease --target "$GITHUB_SHA" \
+          gh release create nightly OpenAdBlock-*.zip --prerelease --target "$GITHUB_SHA" \
             --title "Nightly $VERSION ($GITHUB_RUN_NUMBER)" --notes-file notes.md

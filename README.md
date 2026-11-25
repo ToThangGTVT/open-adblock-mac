@@ -91,14 +91,49 @@ git add open-adblock-core && git commit -m "Update open-adblock-core"
 `packet-tunnel-provider` for Debug (Apple Development profiles only allow this one) and
 `packet-tunnel-provider-systemextension` for Release (required by Developer ID profiles).
 
+`scripts/archive.sh` archives a Release build (Apple silicon) with manual signing and exports it
+to `build/export/Open AdBlock.app`:
+
 ```bash
-xcodebuild -scheme OpenAdBlock -configuration Release -archivePath build/OpenAdBlock.xcarchive \
-    -allowProvisioningUpdates archive
-xcodebuild -exportArchive -archivePath build/OpenAdBlock.xcarchive -exportPath build/export \
-    -exportOptionsPlist ExportOptions.plist     # method: developer-id
-xcrun notarytool submit "build/export/Open AdBlock.app.zip" --keychain-profile <profile> --wait
+TEAM_ID=J299H8YWF8 APP_PROFILE="<app profile name>" TUNNEL_PROFILE="<tunnel profile name>" \
+    scripts/archive.sh
+ditto -c -k --keepParent "build/export/Open AdBlock.app" build/OpenAdBlock.zip
+xcrun notarytool submit build/OpenAdBlock.zip --keychain-profile <profile> --wait
 xcrun stapler staple "build/export/Open AdBlock.app"
 ```
+
+### Signed releases (GitHub Actions)
+
+`.github/workflows/build.yml` publishes every push to `main` as the `nightly` pre-release and
+every `vX.Y.Z` tag as a release. It signs with Developer ID and notarizes once these secrets
+exist; until then the release holds an unsigned build. One-time setup, team Quang Thang To
+(`J299H8YWF8`), by its Account Holder:
+
+1. **Certificate.** Xcode › Settings › Accounts › (Apple ID) › Manage Certificates › **+** ›
+   *Developer ID Application*. In Keychain Access, export that certificate with its private key
+   as `DeveloperID.p12`, protected by a password.
+2. **App IDs** (developer.apple.com › Certificates, Identifiers & Profiles › Identifiers):
+   `io.github.tothanggtvt.openadblock.mac` with *Network Extensions*, *System Extension* and
+   *App Groups*; `io.github.tothanggtvt.openadblock.mac.tunnel` with *Network Extensions* and
+   *App Groups*. Xcode already registered both; check the capabilities.
+3. **Profiles** › **+** › *Developer ID* (macOS), one per App ID, with the Developer ID
+   certificate. Download both `.provisionprofile` files.
+4. **Notarization key.** App Store Connect › Users and Access › Integrations › Team Keys › **+**
+   (role *Developer*). Download `AuthKey_<id>.p8` (only once) and note the Key ID and Issuer ID.
+5. **Secrets** (`gh secret set NAME` without input asks for the value):
+
+```bash
+base64 -i DeveloperID.p12 | gh secret set MACOS_DEVELOPER_ID_P12
+gh secret set MACOS_DEVELOPER_ID_P12_PASSWORD
+base64 -i <app>.provisionprofile | gh secret set MACOS_APP_PROFILE
+base64 -i <tunnel>.provisionprofile | gh secret set MACOS_TUNNEL_PROFILE
+base64 -i AuthKey_<id>.p8 | gh secret set NOTARY_API_KEY
+gh secret set NOTARY_API_KEY_ID
+gh secret set NOTARY_API_ISSUER_ID
+```
+
+Then re-run the workflow (Actions › Build › Run workflow) or push. Pull requests always build
+unsigned and never see the secrets.
 
 To remove the extension during development: `systemextensionsctl uninstall <TEAM_ID>
 io.github.tothanggtvt.openadblock.mac.tunnel` (or delete the app from /Applications).
