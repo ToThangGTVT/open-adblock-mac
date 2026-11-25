@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0AB000000000000000000002 /* PacketTunnel.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 0AB000000000000000000003 /* PacketTunnel.systemextension */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		0AB000000000000000000002 /* io.github.tothanggtvt.openadblock.mac.tunnel.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 0AB000000000000000000003 /* io.github.tothanggtvt.openadblock.mac.tunnel.systemextension */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		0AB000000000000000000004 /* OpenAdBlockCore in Frameworks */ = {isa = PBXBuildFile; productRef = 0AB000000000000000000005 /* OpenAdBlockCore */; };
 /* End PBXBuildFile section */
 
@@ -28,7 +28,7 @@
 			dstPath = "$(SYSTEM_EXTENSIONS_FOLDER_PATH)";
 			dstSubfolderSpec = 16;
 			files = (
-				0AB000000000000000000002 /* PacketTunnel.systemextension in Embed System Extensions */,
+				0AB000000000000000000002 /* io.github.tothanggtvt.openadblock.mac.tunnel.systemextension in Embed System Extensions */,
 			);
 			name = "Embed System Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -36,8 +36,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0AB000000000000000000003 /* io.github.tothanggtvt.openadblock.mac.tunnel.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = io.github.tothanggtvt.openadblock.mac.tunnel.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
 		0AB000000000000000000009 /* Open AdBlock.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Open AdBlock.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		0AB000000000000000000003 /* PacketTunnel.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = io.github.tothanggtvt.openadblock.mac.tunnel.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
 		0AB00000000000000000000A /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		0AB00000000000000000000B /* App-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "App-Info.plist"; sourceTree = "<group>"; };
 		0AB00000000000000000000C /* PacketTunnel-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "PacketTunnel-Info.plist"; sourceTree = "<group>"; };
@@ -46,9 +46,21 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		0AB00000000000000000000F /* App */ = {isa = PBXFileSystemSynchronizedRootGroup; path = App; sourceTree = "<group>"; };
-		0AB000000000000000000010 /* PacketTunnel */ = {isa = PBXFileSystemSynchronizedRootGroup; path = PacketTunnel; sourceTree = "<group>"; };
-		0AB000000000000000000011 /* Shared */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Shared; sourceTree = "<group>"; };
+		0AB00000000000000000000F /* App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = App;
+			sourceTree = "<group>";
+		};
+		0AB000000000000000000010 /* PacketTunnel */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = PacketTunnel;
+			sourceTree = "<group>";
+		};
+		0AB000000000000000000011 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -97,7 +109,7 @@
 			isa = PBXGroup;
 			children = (
 				0AB000000000000000000009 /* Open AdBlock.app */,
-				0AB000000000000000000003 /* PacketTunnel.systemextension */,
+				0AB000000000000000000003 /* io.github.tothanggtvt.openadblock.mac.tunnel.systemextension */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -105,6 +117,30 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		0AB000000000000000000007 /* PacketTunnel */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0AB00000000000000000001C /* Build configuration list for PBXNativeTarget "PacketTunnel" */;
+			buildPhases = (
+				0AB00000000000000000001D /* Sources */,
+				0AB000000000000000000013 /* Frameworks */,
+				0AB00000000000000000001E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				0AB000000000000000000010 /* PacketTunnel */,
+				0AB000000000000000000011 /* Shared */,
+			);
+			name = PacketTunnel;
+			packageProductDependencies = (
+				0AB000000000000000000005 /* OpenAdBlockCore */,
+			);
+			productName = PacketTunnel;
+			productReference = 0AB000000000000000000003 /* io.github.tothanggtvt.openadblock.mac.tunnel.systemextension */;
+			productType = "com.apple.product-type.system-extension";
+		};
 		0AB000000000000000000017 /* OpenAdBlock */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 0AB000000000000000000018 /* Build configuration list for PBXNativeTarget "OpenAdBlock" */;
@@ -127,30 +163,6 @@
 			productName = OpenAdBlock;
 			productReference = 0AB000000000000000000009 /* Open AdBlock.app */;
 			productType = "com.apple.product-type.application";
-		};
-		0AB000000000000000000007 /* PacketTunnel */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 0AB00000000000000000001C /* Build configuration list for PBXNativeTarget "PacketTunnel" */;
-			buildPhases = (
-				0AB00000000000000000001D /* Sources */,
-				0AB000000000000000000013 /* Frameworks */,
-				0AB00000000000000000001E /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				0AB000000000000000000010 /* PacketTunnel */,
-				0AB000000000000000000011 /* Shared */,
-			);
-			name = PacketTunnel;
-			packageProductDependencies = (
-				0AB000000000000000000005 /* OpenAdBlockCore */,
-			);
-			productName = PacketTunnel;
-			productReference = 0AB000000000000000000003 /* PacketTunnel.systemextension */;
-			productType = "com.apple.product-type.system-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -234,14 +246,15 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ENABLE_MODULES = YES;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				GCC_NO_COMMON_BLOCKS = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = J299H8YWF8;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				ONLY_ACTIVE_ARCH = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = Debug;
@@ -252,11 +265,12 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ENABLE_MODULES = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = J299H8YWF8;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_NO_COMMON_BLOCKS = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 			};
 			name = Release;
@@ -264,95 +278,86 @@
 		0AB000000000000000000023 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				PRODUCT_NAME = "Open AdBlock";
-				PRODUCT_MODULE_NAME = OpenAdBlock;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(OAB_BUNDLE_PREFIX)";
-				INFOPLIST_FILE = "Config/App-Info.plist";
+				CODE_SIGN_ENTITLEMENTS = Config/App.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/App-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Open AdBlock";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Open AdBlock";
-				CODE_SIGN_ENTITLEMENTS = "Config/App.entitlements";
-				COMBINE_HIDPI_IMAGES = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(OAB_BUNDLE_PREFIX)";
+				PRODUCT_MODULE_NAME = OpenAdBlock;
+				PRODUCT_NAME = "Open AdBlock";
 			};
 			name = Debug;
 		};
 		0AB000000000000000000024 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				PRODUCT_NAME = "Open AdBlock";
-				PRODUCT_MODULE_NAME = OpenAdBlock;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(OAB_BUNDLE_PREFIX)";
-				INFOPLIST_FILE = "Config/App-Info.plist";
+				CODE_SIGN_ENTITLEMENTS = Config/App.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/App-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Open AdBlock";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Open AdBlock";
-				CODE_SIGN_ENTITLEMENTS = "Config/App.entitlements";
-				COMBINE_HIDPI_IMAGES = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(OAB_BUNDLE_PREFIX)";
+				PRODUCT_MODULE_NAME = OpenAdBlock;
+				PRODUCT_NAME = "Open AdBlock";
 			};
 			name = Release;
 		};
 		0AB000000000000000000025 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				PRODUCT_NAME = "$(PRODUCT_BUNDLE_IDENTIFIER)";
-				PRODUCT_MODULE_NAME = PacketTunnel;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(OAB_BUNDLE_PREFIX).tunnel";
-				INFOPLIST_FILE = "Config/PacketTunnel-Info.plist";
+				CODE_SIGN_ENTITLEMENTS = Config/PacketTunnel.entitlements;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/PacketTunnel-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Open AdBlock Tunnel";
 				INFOPLIST_KEY_NSSystemExtensionUsageDescription = "Filters ads and trackers for every app on this Mac.";
-				CODE_SIGN_ENTITLEMENTS = "Config/PacketTunnel.entitlements";
-				SKIP_INSTALL = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(OAB_BUNDLE_PREFIX).tunnel";
+				PRODUCT_MODULE_NAME = PacketTunnel;
+				PRODUCT_NAME = "$(PRODUCT_BUNDLE_IDENTIFIER)";
+				SKIP_INSTALL = YES;
 			};
 			name = Debug;
 		};
 		0AB000000000000000000026 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				PRODUCT_NAME = "$(PRODUCT_BUNDLE_IDENTIFIER)";
-				PRODUCT_MODULE_NAME = PacketTunnel;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(OAB_BUNDLE_PREFIX).tunnel";
-				INFOPLIST_FILE = "Config/PacketTunnel-Info.plist";
+				CODE_SIGN_ENTITLEMENTS = Config/PacketTunnel.entitlements;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/PacketTunnel-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Open AdBlock Tunnel";
 				INFOPLIST_KEY_NSSystemExtensionUsageDescription = "Filters ads and trackers for every app on this Mac.";
-				CODE_SIGN_ENTITLEMENTS = "Config/PacketTunnel.entitlements";
-				SKIP_INSTALL = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(OAB_BUNDLE_PREFIX).tunnel";
+				PRODUCT_MODULE_NAME = PacketTunnel;
+				PRODUCT_NAME = "$(PRODUCT_BUNDLE_IDENTIFIER)";
+				SKIP_INSTALL = YES;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		0AB00000000000000000001F /* Build configuration list for PBXProject "OpenAdBlock" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				0AB000000000000000000021 /* Debug */,
-				0AB000000000000000000022 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		0AB000000000000000000018 /* Build configuration list for PBXNativeTarget "OpenAdBlock" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -367,6 +372,15 @@
 			buildConfigurations = (
 				0AB000000000000000000025 /* Debug */,
 				0AB000000000000000000026 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		0AB00000000000000000001F /* Build configuration list for PBXProject "OpenAdBlock" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0AB000000000000000000021 /* Debug */,
+				0AB000000000000000000022 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
