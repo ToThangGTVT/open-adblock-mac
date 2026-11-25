@@ -5,3 +5,9 @@ xcuserdata/
 .DS_Store
 Config/Local.xcconfig
 .swiftpm/
+
+# Signing material (never commit)
+*.p12
+*.p8
+*.provisionprofile
+*.cer

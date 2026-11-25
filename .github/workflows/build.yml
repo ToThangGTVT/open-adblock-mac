@@ -43,13 +43,28 @@ jobs:
 
       - name: Signing mode
         id: mode
+        # Signs only with every secret present; otherwise builds unsigned and lists what is missing.
         env:
-          HAS_CERTIFICATE: ${{ secrets.MACOS_DEVELOPER_ID_P12 != '' }}
+          MACOS_DEVELOPER_ID_P12: ${{ secrets.MACOS_DEVELOPER_ID_P12 != '' }}
+          MACOS_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_P12_PASSWORD != '' }}
+          MACOS_APP_PROFILE: ${{ secrets.MACOS_APP_PROFILE != '' }}
+          MACOS_TUNNEL_PROFILE: ${{ secrets.MACOS_TUNNEL_PROFILE != '' }}
+          NOTARY_API_KEY: ${{ secrets.NOTARY_API_KEY != '' }}
+          NOTARY_API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID != '' }}
+          NOTARY_API_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID != '' }}
         run: |
-          if [[ "$HAS_CERTIFICATE" == true && "$GITHUB_EVENT_NAME" != pull_request ]]; then
-            echo "signed=true" >> "$GITHUB_OUTPUT"; echo "Developer ID signing"
+          missing=()
+          for name in MACOS_DEVELOPER_ID_P12 MACOS_DEVELOPER_ID_P12_PASSWORD MACOS_APP_PROFILE \
+                      MACOS_TUNNEL_PROFILE NOTARY_API_KEY NOTARY_API_KEY_ID NOTARY_API_ISSUER_ID; do
+            [[ "${!name}" == true ]] || missing+=("$name")
+          done
+          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            echo "signed=false" >> "$GITHUB_OUTPUT"; echo "Unsigned build (pull request)"
+          elif (( ${#missing[@]} )); then
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Unsigned build; missing secrets: ${missing[*]}"
           else
-            echo "signed=false" >> "$GITHUB_OUTPUT"; echo "Unsigned build"
+            echo "signed=true" >> "$GITHUB_OUTPUT"; echo "Developer ID signing"
           fi
 
       # The core pins its toolchain in rust-toolchain.toml; install it before cargo runs.
