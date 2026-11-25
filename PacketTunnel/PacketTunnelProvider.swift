@@ -110,7 +110,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
         report = engine.replaceRules(
             dns: lists.text(for: settings.enabledLists(browser: false)),
-            browser: settings.https.enabled ? lists.text(for: settings.enabledLists(browser: true)) : "",
+            browser: settings.https.enabled
+                ? lists.text(for: settings.enabledLists(browser: true)) + "\n" + FilterLists.browserFixes
+                : "",
             custom: settings.customRules, apply: true)
     }
 

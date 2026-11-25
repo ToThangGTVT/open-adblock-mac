@@ -34,6 +34,13 @@ final class FilterLists: @unchecked Sendable {
             .flatMap { try? JSONDecoder().decode([String: Entry].self, from: $0) } ?? [:]
     }
 
+    /// Rules added to the browser lists whatever the subscriptions. Desktop YouTube loads the
+    /// next video's player response with `fetch`; the lists only cover it on m.youtube.com (AdGuard
+    /// Base) and with uBlock-only scriptlets, so www.youtube.com kept its ads after the first video.
+    static let browserFixes = """
+        youtube.com,youtube-nocookie.com,youtubekids.com##+js(json-prune, playerResponse.adPlacements playerResponse.playerAds playerResponse.adSlots adPlacements playerAds adSlots)
+        """
+
     /// Text of the given lists that are on disk, joined for the engine.
     func text(for lists: [FilterListSetting]) -> String {
         lists.compactMap { try? String(contentsOf: file($0.id), encoding: .utf8) }
