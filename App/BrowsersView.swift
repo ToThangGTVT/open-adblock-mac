@@ -34,6 +34,17 @@ struct BrowsersView: View {
                 }
                 Section("Status") {
                     LabeledContent("Browser filtering", value: proxyState)
+                    if let error = tunnel.browserProxyError {
+                        Label {
+                            Text("Could not start: \(error)")
+                        } icon: {
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                        }
+                        .font(.callout)
+                        .foregroundStyle(.red)
+                        .textSelection(.enabled)
+                        if tunnel.lastErrorNeedsSettings { VPNSettingsHelp() }
+                    }
                     if let flows = tunnel.status?.browserFlows {
                         LabeledContent("Browser connections filtered", value: flows.formatted())
                     }
@@ -86,7 +97,9 @@ struct BrowsersView: View {
         case .connected: "Running"
         case .connecting, .reasserting: "Starting…"
         case .disconnecting: "Stopping…"
-        default: trusted ? "Off" : "Waiting for the trusted certificate"
+        default:
+            if tunnel.browserProxyError != nil { "Failed" }
+            else { trusted ? "Off" : "Waiting for the trusted certificate" }
         }
     }
 

@@ -95,7 +95,10 @@ private struct ProtectionCard: View {
                     .font(.title2.weight(.semibold))
                 Text(subtitle).foregroundStyle(.secondary)
                 if let error = tunnel.lastError {
-                    Text(error).font(.callout).foregroundStyle(.red)
+                    Text(error).font(.callout).foregroundStyle(.red).textSelection(.enabled)
+                    if tunnel.lastErrorNeedsSettings {
+                        VPNSettingsHelp()
+                    }
                 }
             }
             Spacer()
@@ -111,6 +114,20 @@ private struct ProtectionCard: View {
         }
         .padding(20)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+/// What to do when macOS refuses to start an Open AdBlock configuration, with a button that opens
+/// the right System Settings pane.
+struct VPNSettingsHelp: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("In System Settings › VPN, turn “Open AdBlock” on (browser filtering is listed under Network › Filters). If it still fails, remove that entry, then turn protection on again here: the app recreates it. This also happens after switching between a debug and a released build of the app.")
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Open VPN Settings…") { TunnelManager.openVPNSettings() }
+        }
+        .padding(.top, 4)
     }
 }
 
