@@ -16,7 +16,10 @@ submodule on its `main` branch.
   AdGuard/uBlock syntax (`||ads.example^`, `@@||allowed.example^`).
 - Query log with search, today's totals and most blocked domains, traffic counters.
 - IPv6 filtering and Goodbye DPI (experimental) toggles.
-- Local network (10/8, 192.168/16, link-local, multicast) stays outside the tunnel.
+- Local network (10/8, 172.16/12, 192.168/16, link-local, multicast, broadcast, IPv6 ULA)
+  stays outside the tunnel, the same ranges as the Android app.
+- When macOS refuses to start the tunnel or browser filtering, the app shows why, with a button
+  to the VPN settings.
 
 ## How it works
 
@@ -85,6 +88,14 @@ scripts/build-core.sh
 git add open-adblock-core && git commit -m "Update open-adblock-core"
 ```
 
+The app icon is the Android app's design; `swift scripts/make-icon.swift` renders it into
+`App/Assets.xcassets`.
+
+A system extension is only replaced when its build number changes. When reinstalling a local
+build over one with the same number, build with a higher one, e.g.
+`CURRENT_PROJECT_VERSION=2.1`. Do not mix a debug app (Apple Development) with a Developer ID
+extension: macOS then refuses to launch the tunnel (code signature requirements).
+
 ## Distribution (Developer ID)
 
 `OAB_NE_PROVIDER` in `Config/Base.xcconfig` picks the Network Extension entitlement value:
@@ -146,4 +157,4 @@ io.github.tothanggtvt.openadblock.mac.tunnel` (or delete the app from /Applicati
 
 - HTTPS filtering (needs a root CA in the user's keychain; the core supports it).
 - Per-app rules: packet tunnels do not see which app sent a packet.
-- App icon, localisation (Vietnamese), launch at login.
+- Localisation (Vietnamese), launch at login.

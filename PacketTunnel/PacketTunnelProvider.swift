@@ -164,20 +164,33 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private func networkSettings() -> NEPacketTunnelNetworkSettings {
         let network = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "127.0.0.1")
         let ipv4 = NEIPv4Settings(addresses: [Address.ipv4], subnetMasks: ["255.255.255.252"])
-        ipv4.includedRoutes = [NEIPv4Route.default()]
-        // Keep the local network reachable directly (printers, AirDrop, router admin).
+        ipv4.includedRoutes = [
+            NEIPv4Route.default(),
+            // The tunnel's own /30 (DNS at .2) sits inside 172.16/12, excluded below: keep it in.
+            NEIPv4Route(destinationAddress: "172.19.0.0", subnetMask: "255.255.255.252"),
+        ]
+        // The local network is never filtered: every private, link-local, multicast and
+        // broadcast destination goes straight to the physical interface (printers, NAS, router
+        // admin, AirDrop/AirPlay, Docker and VM networks in 172.16/12, LAN discovery).
         ipv4.excludedRoutes = [
             NEIPv4Route(destinationAddress: "10.0.0.0", subnetMask: "255.0.0.0"),
+            NEIPv4Route(destinationAddress: "172.16.0.0", subnetMask: "255.240.0.0"),
             NEIPv4Route(destinationAddress: "192.168.0.0", subnetMask: "255.255.0.0"),
             NEIPv4Route(destinationAddress: "169.254.0.0", subnetMask: "255.255.0.0"),
             NEIPv4Route(destinationAddress: "224.0.0.0", subnetMask: "240.0.0.0"),
+            NEIPv4Route(destinationAddress: "255.255.255.255", subnetMask: "255.255.255.255"),
         ]
         network.ipv4Settings = ipv4
         var servers = [Address.dns4]
         if settings.ipv6 {
             let ipv6 = NEIPv6Settings(addresses: [Address.ipv6], networkPrefixLengths: [126])
-            ipv6.includedRoutes = [NEIPv6Route.default()]
+            ipv6.includedRoutes = [
+                NEIPv6Route.default(),
+                // The tunnel's own /126 is a unique local address, excluded below with fc00::/7.
+                NEIPv6Route(destinationAddress: "fdfe:dcba:9876::", networkPrefixLength: 126),
+            ]
             ipv6.excludedRoutes = [
+                NEIPv6Route(destinationAddress: "fc00::", networkPrefixLength: 7),
                 NEIPv6Route(destinationAddress: "fe80::", networkPrefixLength: 10),
                 NEIPv6Route(destinationAddress: "ff00::", networkPrefixLength: 8),
             ]
