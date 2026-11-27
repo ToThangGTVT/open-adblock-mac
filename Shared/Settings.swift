@@ -102,9 +102,10 @@ struct Settings: Codable, Equatable {
         return Self.json(value)
     }
 
-    /// `configurePolicy` JSON. Per-app policy does not exist on macOS (packets carry no owner).
+    /// `configurePolicy` JSON. No per-app policy on macOS; owners only name apps in the log. Every
+    /// app resolves through mDNSResponder, hence `systemResolver`.
     var policyJSON: String {
-        Self.json(["ipv6": ipv6, "dpi": ["enabled": dpi]])
+        Self.json(["ipv6": ipv6, "dpi": ["enabled": dpi], "systemResolver": true])
     }
 
     /// `configureHttps` JSON for the root CA with fingerprint `ca` (nil when none exists yet).

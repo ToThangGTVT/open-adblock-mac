@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct QueryLogView: View {
@@ -18,7 +19,10 @@ struct QueryLogView: View {
             case .allowed: !entry.blocked
             }
         }
-        .filter { search.isEmpty || $0.url.localizedCaseInsensitiveContains(search) }
+        .filter {
+            search.isEmpty || $0.url.localizedCaseInsensitiveContains(search)
+                || ($0.app?.name.localizedCaseInsensitiveContains(search) ?? false)
+        }
     }
 
     var body: some View {
@@ -71,7 +75,7 @@ struct QueryLogView: View {
         .pageBackground()
         .navigationTitle("Activity")
         .navigationSubtitle(tunnel.state == .on ? "Live" : "Paused while protection is off")
-        .searchable(text: $search, placement: .toolbar, prompt: "Search URLs")
+        .searchable(text: $search, placement: .toolbar, prompt: "Search URLs or apps")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Picker("Show", selection: $filter) {
@@ -119,6 +123,10 @@ private struct LogTable: View {
                     .monospacedDigit().foregroundStyle(.secondary)
             }
             .width(72)
+            TableColumn("App") { entry in
+                AppLabel(app: entry.app, dns: entry.kind == "dns")
+            }
+            .width(min: 90, ideal: 150, max: 260)
             TableColumn("Request") { entry in
                 HStack(spacing: 8) {
                     Image(systemName: entry.blocked ? "xmark.shield.fill" : "checkmark.shield.fill")
@@ -144,5 +152,40 @@ private struct LogTable: View {
         }
         .scrollContentBackground(.hidden)
         .alternatingRowBackgrounds(.disabled)
+    }
+}
+
+/// An app's icon and name. DNS rows have no app: macOS resolves names in mDNSResponder.
+private struct AppLabel: View {
+    let app: AppInfo?
+    let dns: Bool
+
+    var body: some View {
+        if let app {
+            HStack(spacing: 6) {
+                Image(nsImage: AppIcons.icon(for: app)).resizable().frame(width: 16, height: 16)
+                Text(app.name).lineLimit(1).truncationMode(.tail)
+            }
+            .help(app.bundleID ?? app.path ?? app.name)
+        } else {
+            Text(dns ? "System DNS" : "Unknown").foregroundStyle(.tertiary).lineLimit(1)
+                .help(dns ? "Apps resolve names through macOS (mDNSResponder), so DNS lookups have no app" : "")
+        }
+    }
+}
+
+/// Icons looked up once per app (the table redraws with every status update).
+@MainActor
+private enum AppIcons {
+    private static var cache: [AppInfo: NSImage] = [:]
+
+    static func icon(for app: AppInfo) -> NSImage {
+        if let icon = cache[app] { return icon }
+        let path = app.bundleID.flatMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0)?.path }
+            ?? app.path
+        let icon = path.map { NSWorkspace.shared.icon(forFile: $0) }
+            ?? NSImage(systemSymbolName: "app", accessibilityDescription: nil) ?? NSImage()
+        cache[app] = icon
+        return icon
     }
 }

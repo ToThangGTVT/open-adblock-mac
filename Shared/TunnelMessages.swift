@@ -28,12 +28,22 @@ struct LogEntry: Codable, Identifiable, Hashable {
     var kind: String
     /// Path of an inspected HTTPS request; nil for DNS answers and other connections.
     var path: String?
+    /// The app that made the request; nil when unknown (DNS goes through the system resolver).
+    var app: AppInfo?
 
     /// `https://domain/path` for inspected requests, otherwise the domain alone.
     var url: String {
         guard let path else { return domain }
         return "https://\(domain)\(path)"
     }
+}
+
+/// An app as the log shows it.
+struct AppInfo: Codable, Hashable {
+    var name: String
+    var bundleID: String?
+    /// The `.app` bundle, or the executable of a command-line tool or daemon.
+    var path: String?
 }
 
 struct DomainCount: Codable, Hashable, Identifiable {

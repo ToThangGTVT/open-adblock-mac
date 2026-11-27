@@ -288,4 +288,11 @@ private final class InterfaceProtector: SocketProtector, @unchecked Sendable {
         }
         return true
     }
+
+    func connectionOwner(
+        protocol: UInt8, source: String, sourcePort: UInt16, destination: String,
+        destinationPort: UInt16
+    ) -> Int64? {
+        AppDirectory.shared.owner(protocol: `protocol`, sourcePort: sourcePort, destinationPort: destinationPort)
+    }
 }
