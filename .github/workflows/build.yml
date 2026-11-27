@@ -179,10 +179,53 @@ jobs:
           ditto -c -k --keepParent "build/export/Open AdBlock.app" \
             "build/OpenAdBlock-${{ steps.version.outputs.version }}-$GITHUB_RUN_NUMBER$suffix.zip"
 
+      # In-app updates (Sparkle) read appcast.xml from the latest release. Only signed, notarized
+      # tag builds are offered: the archive is signed with the EdDSA key whose public half is
+      # SUPublicEDKey in Config/App-Info.plist.
+      - name: Appcast (Sparkle)
+        if: steps.mode.outputs.signed == 'true' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [[ -z "$SPARKLE_PRIVATE_KEY" ]]; then
+            echo "::warning::SPARKLE_PRIVATE_KEY is not set; this release offers no in-app update"
+            exit 0
+          fi
+          zip="$(ls build/OpenAdBlock-*.zip)"
+          name="$(basename "$zip")"
+          signature="$(echo "$SPARKLE_PRIVATE_KEY" \
+            | build/SourcePackages/artifacts/sparkle/Sparkle/bin/sign_update --ed-key-file - -p "$zip")"
+          length="$(stat -f %z "$zip")"
+          minimum="$(sed -n 's/^MACOSX_DEPLOYMENT_TARGET = //p' Config/Base.xcconfig)"
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/$name"
+          cat > build/appcast.xml <<XML
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+            <channel>
+              <title>Open AdBlock</title>
+              <item>
+                <title>Open AdBlock $VERSION</title>
+                <pubDate>$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')</pubDate>
+                <link>https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME</link>
+                <sparkle:version>$GITHUB_RUN_NUMBER</sparkle:version>
+                <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
+                <sparkle:minimumSystemVersion>$minimum</sparkle:minimumSystemVersion>
+                <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+                <enclosure url="$url" length="$length" type="application/octet-stream"
+                  sparkle:edSignature="$signature"/>
+              </item>
+            </channel>
+          </rss>
+          XML
+          cat build/appcast.xml
+
       - uses: actions/upload-artifact@v4
         with:
           name: OpenAdBlock
-          path: build/OpenAdBlock-*.zip
+          path: |
+            build/OpenAdBlock-*.zip
+            build/appcast.xml
           if-no-files-found: error
 
       - name: Remove signing keychain
@@ -220,7 +263,9 @@ jobs:
       - name: Publish release (tag)
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          gh release create "$GITHUB_REF_NAME" OpenAdBlock-*.zip \
+          assets=(OpenAdBlock-*.zip)
+          [[ -f appcast.xml ]] && assets+=(appcast.xml)
+          gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
             --title "Open AdBlock $VERSION" --notes-file notes.md --verify-tag
 
       - name: Refresh nightly pre-release (main)
