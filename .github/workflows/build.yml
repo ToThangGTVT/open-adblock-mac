@@ -20,8 +20,12 @@ concurrency:
 
 jobs:
   macos:
-    runs-on: macos-15
+    # The xcode-27 image (public preview) is the only one with Xcode 27; its default Xcode lags
+    # behind, so the Xcode step below selects the version explicitly.
+    runs-on: xcode-27
     timeout-minutes: 60
+    env:
+      XCODE_VERSION: '27.2'
     outputs:
       version: ${{ steps.version.outputs.version }}
       signed: ${{ steps.mode.outputs.signed }}
@@ -29,6 +33,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Xcode
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_$XCODE_VERSION.app"
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
 
       - name: Version
         id: version
