@@ -7,6 +7,29 @@ struct FiltersView: View {
     @State private var catalog: CatalogSource?
 
     var body: some View {
+        let active = store.settings.lists.filter(\.enabled).count
+        form
+            .pageBackground()
+            .navigationTitle("Filters")
+            .navigationSubtitle(
+                tunnel.state == .on && (tunnel.status?.rulesLoaded ?? 0) > 0
+                    ? "\(active) lists active · \((tunnel.status?.rulesLoaded ?? 0).formatted()) rules"
+                    : "\(active) lists active")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Update Lists", systemImage: "arrow.clockwise") { tunnel.updateLists() }
+                        .help("Download the latest version of every list")
+                        .disabled(
+                            tunnel.state != .on || tunnel.status?.lists.contains(where: \.downloading) == true)
+                }
+            }
+        .sheet(item: $catalog) { source in
+            CatalogSheet(source: source)
+        }
+        .onAppear { customRules = store.settings.customRules }
+    }
+
+    private var form: some View {
         Form {
             ListSection(source: .dns, catalog: $catalog)
             ListSection(source: .browser, catalog: $catalog)
@@ -20,22 +43,15 @@ struct FiltersView: View {
                         .font(.callout).foregroundStyle(.secondary)
                     Spacer()
                     Button("Apply") { store.settings.customRules = customRules }
+                        .buttonStyle(.borderedProminent)
                         .disabled(customRules == store.settings.customRules)
                 }
             } header: {
-                Text("Custom rules")
+                SectionLabel("Custom rules", icon: "pencil.and.list.clipboard", tint: Theme.warning)
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Filters")
-        .toolbar {
-            Button("Update Lists", systemImage: "arrow.clockwise") { tunnel.updateLists() }
-                .disabled(tunnel.state != .on || tunnel.status?.lists.contains(where: \.downloading) == true)
-        }
-        .sheet(item: $catalog) { source in
-            CatalogSheet(source: source)
-        }
-        .onAppear { customRules = store.settings.customRules }
+        .scrollContentBackground(.hidden)
     }
 }
 
@@ -61,10 +77,13 @@ private struct ListSection: View {
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(addURL)
                 Button("Add", action: addURL).disabled(URL(string: newURL)?.scheme != "https")
-                Button("Browse Catalog…") { catalog = source }
+                Button("Browse Catalog…", systemImage: "books.vertical") { catalog = source }
+                    .buttonStyle(.borderedProminent)
             }
         } header: {
-            Text(source.title)
+            SectionLabel(
+                source.title, icon: source == .dns ? "network.badge.shield.half.filled" : "globe",
+                tint: source == .dns ? Theme.accent : SidebarItem.browsers.tint)
         } footer: {
             Text(footer).foregroundStyle(.secondary)
         }
@@ -99,9 +118,13 @@ private struct ListRow: View {
     let status: ListStatus?
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .center, spacing: 12) {
+            IconBadge(
+                systemName: list.browser ? "doc.text.fill" : "list.bullet.rectangle.fill",
+                tint: list.enabled ? (list.browser ? SidebarItem.browsers.tint : Theme.accent) : Theme.slate,
+                size: 30)
             VStack(alignment: .leading, spacing: 3) {
-                Text(list.name)
+                Text(list.name).fontWeight(.medium)
                 Text(list.url.absoluteString).font(.caption).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.middle)
                 if let status, let updated = status.updated {
@@ -109,7 +132,8 @@ private struct ListRow: View {
                         .font(.caption).foregroundStyle(.tertiary)
                 }
                 if let error = status?.error {
-                    Text(error).font(.caption).foregroundStyle(.red)
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(Theme.blocked)
                 }
             }
             Spacer()
@@ -118,6 +142,7 @@ private struct ListRow: View {
             }
             Button("Remove", systemImage: "trash") { store.remove(list.id) }
                 .labelStyle(.iconOnly).buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
                 .help("Remove this list")
             Toggle(
                 list.name,
@@ -159,8 +184,12 @@ private struct CatalogSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text(source.title).font(.title3.weight(.semibold))
+            HStack(spacing: 12) {
+                IconBadge(systemName: "books.vertical.fill", tint: SidebarItem.filters.tint, size: 32)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(source.title).font(.title3.weight(.semibold))
+                    Text("Pick the lists to add").font(.caption).foregroundStyle(.secondary)
+                }
                 Spacer()
                 if source == .browser {
                     Toggle("Recommended only", isOn: $recommendedOnly).toggleStyle(.checkbox)
@@ -216,9 +245,7 @@ private struct CatalogRow: View {
                 HStack(spacing: 6) {
                     Text(entry.name)
                     if entry.recommended {
-                        Text("Recommended").font(.caption2.weight(.semibold))
-                            .padding(.horizontal, 5).padding(.vertical, 1)
-                            .background(Color.accentColor.opacity(0.15), in: Capsule())
+                        Pill(text: "Recommended", icon: "star.fill", tint: Theme.accent)
                     }
                 }
                 if !entry.summary.isEmpty {
@@ -242,6 +269,7 @@ private struct CatalogRow: View {
                     })
             )
             .labelsHidden()
+            .toggleStyle(.switch)
         }
         .padding(.vertical, 2)
     }

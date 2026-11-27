@@ -12,27 +12,52 @@ struct BrowsersView: View {
 
     private var certificate: Data? { tunnel.status?.certificate }
 
+    private var tint: Color { SidebarItem.browsers.tint }
+
     var body: some View {
+        form
+            .pageBackground()
+            .navigationTitle("Browsers")
+            .navigationSubtitle(store.settings.https.enabled ? "Filtering: \(proxyState)" : "In-page ad filtering is off")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Toggle("Filter ads inside browsers", isOn: $store.settings.https.enabled)
+                        .toggleStyle(.switch)
+                        .help("Filter ads inside browsers")
+                }
+            }
+        .onAppear(perform: checkTrust)
+        .onChange(of: tunnel.status?.certificateFingerprint) { checkTrust() }
+    }
+
+    private var form: some View {
         Form {
             Section {
-                Toggle("Filter ads inside browsers", isOn: $store.settings.https.enabled)
-                Text("Browsers' HTTPS connections are decrypted on this Mac, filtered with the browser lists, and re-encrypted. Banking, payment and health sites are never decrypted, and no page content leaves your Mac.")
-                    .font(.callout).foregroundStyle(.secondary)
+                HStack(alignment: .top, spacing: 12) {
+                    IconBadge(systemName: "lock.shield.fill", tint: tint, size: 30)
+                    Text("Browsers' HTTPS connections are decrypted on this Mac, filtered with the browser lists, and re-encrypted. Banking, payment and health sites are never decrypted, and no page content leaves your Mac.")
+                        .font(.callout).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             if store.settings.https.enabled {
-                Section("Certificate") { certificateRow }
+                Section {
+                    certificateRow
+                } header: {
+                    SectionLabel("Certificate", icon: "checkmark.seal.fill", tint: Theme.accent)
+                }
                 Section {
                     ForEach(KnownBrowser.all) { browser in
                         BrowserRow(browser: browser)
                     }
                 } header: {
-                    Text("Browsers")
+                    SectionLabel("Browsers", icon: "macwindow.on.rectangle", tint: tint)
                 } footer: {
                     Text("Firefox uses the macOS certificate store only when security.enterprise_roots.enabled is on (the default on recent versions).")
                         .foregroundStyle(.secondary)
                 }
-                Section("Status") {
+                Section {
                     LabeledContent("Browser filtering", value: proxyState)
                     if let error = tunnel.browserProxyError {
                         Label {
@@ -48,13 +73,13 @@ struct BrowsersView: View {
                     if let flows = tunnel.status?.browserFlows {
                         LabeledContent("Browser connections filtered", value: flows.formatted())
                     }
+                } header: {
+                    SectionLabel("Status", icon: "waveform.path.ecg", tint: Theme.info)
                 }
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Browsers")
-        .onAppear(perform: checkTrust)
-        .onChange(of: tunnel.status?.certificateFingerprint) { checkTrust() }
+        .scrollContentBackground(.hidden)
     }
 
     @ViewBuilder private var certificateRow: some View {
@@ -62,11 +87,13 @@ struct BrowsersView: View {
             Text("Turn protection on: the filtering extension creates the certificate.")
                 .foregroundStyle(.secondary)
         } else if let certificate {
-            HStack {
-                Image(systemName: trusted ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
-                    .foregroundStyle(trusted ? Color.green : Color.orange)
+            HStack(spacing: 12) {
+                IconBadge(
+                    systemName: trusted ? "checkmark.seal.fill" : "exclamationmark.triangle.fill",
+                    tint: trusted ? Theme.accent : Theme.warning, size: 30)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(trusted ? "Open AdBlock Local CA is trusted" : "The certificate is not trusted yet")
+                        .fontWeight(.medium)
                     Text("SHA-256 \(CertificateTrust.fingerprint(certificate).prefix(16))…")
                         .font(.caption.monospaced()).foregroundStyle(.secondary)
                 }
@@ -79,6 +106,7 @@ struct BrowsersView: View {
                     }
                 } else {
                     Button("Trust Certificate…") { trust(certificate) }
+                        .buttonStyle(.borderedProminent)
                 }
             }
             if let trustError {
@@ -153,14 +181,15 @@ private struct BrowserRow: View {
         ) {
             HStack {
                 if let icon {
-                    Image(nsImage: icon).resizable().frame(width: 20, height: 20)
+                    Image(nsImage: icon).resizable().frame(width: 26, height: 26)
                 }
                 Text(browser.name)
                 if !installed {
-                    Text("not installed").font(.caption).foregroundStyle(.tertiary)
+                    Pill(text: "Not installed", tint: Theme.slate)
                 }
             }
         }
+        .toggleStyle(.switch)
         // Looked up once per appearance, not on every redraw (the status redraws this view every
         // two seconds while protection is on).
         .onAppear {

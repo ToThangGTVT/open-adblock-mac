@@ -8,6 +8,13 @@ struct SettingsView: View {
     @EnvironmentObject private var launchAtLogin: LaunchAtLogin
 
     var body: some View {
+        form
+            .pageBackground()
+            .navigationTitle("Settings")
+            .navigationSubtitle("Version \(Bundle.main.version)")
+    }
+
+    private var form: some View {
         Form {
             Section {
                 Toggle("Launch at login", isOn: Binding(
@@ -26,7 +33,7 @@ struct SettingsView: View {
                 Toggle("Hide from Dock", isOn: $hideDockIcon)
                     .onChange(of: hideDockIcon) { _, hidden in DockIcon.apply(hidden: hidden) }
             } header: {
-                Text("App")
+                SectionLabel("App", icon: "app.badge.checkmark.fill", tint: Theme.accent)
             } footer: {
                 Text("Open AdBlock stays in the menu bar. Closing the window keeps protection running.")
                     .foregroundStyle(.secondary)
@@ -36,7 +43,7 @@ struct SettingsView: View {
                 launchAtLogin.refresh()
             }
 
-            Section("DNS") {
+            Section {
                 Picker("Upstream", selection: $store.settings.dns) {
                     ForEach(DNSPreset.allCases) { Text($0.title).tag($0) }
                 }
@@ -56,6 +63,11 @@ struct SettingsView: View {
                     Text("0.0.0.0 / ::").tag("zero")
                     Text("NXDOMAIN").tag("nxdomain")
                 }
+            } header: {
+                SectionLabel("Secure DNS", icon: "lock.fill", tint: Theme.info)
+            } footer: {
+                Text("Encrypted DNS (HTTPS, TLS or QUIC) hides which sites you visit from your network and provider.")
+                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -63,7 +75,7 @@ struct SettingsView: View {
                 Toggle("Keep the query log", isOn: $store.settings.logging)
                 Toggle("Goodbye DPI (experimental)", isOn: $store.settings.dpi)
             } header: {
-                Text("Traffic")
+                SectionLabel("Traffic", icon: "arrow.left.arrow.right", tint: Theme.violet)
             } footer: {
                 Text("Goodbye DPI splits and disguises the first packets of HTTP/HTTPS connections so that network censorship based on deep packet inspection cannot read them.")
                     .foregroundStyle(.secondary)
@@ -75,7 +87,7 @@ struct SettingsView: View {
                 Button("Check for Updates…") { updater.checkForUpdates() }
                     .disabled(!updater.canCheckForUpdates)
             } header: {
-                Text("Updates")
+                SectionLabel("Updates", icon: "arrow.down.circle.fill", tint: Theme.warning)
             } footer: {
                 Text(updater.isConfigured
                     ? "New versions come from the project's GitHub releases."
@@ -83,14 +95,27 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("About") {
+            Section {
+                HStack(spacing: 12) {
+                    Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 40, height: 40)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Open AdBlock").font(.headline)
+                        Text("Free and open source. Filtering runs on this Mac.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Link(destination: URL(string: "https://github.com/ToThangGTVT/open-adblock-mac")!) {
+                        Label("Source code", systemImage: "chevron.left.forwardslash.chevron.right")
+                    }
+                }
                 LabeledContent("App", value: Bundle.main.version)
                 LabeledContent("Core", value: tunnel.status?.engineVersion ?? "Starts with protection")
-                Link("Source code", destination: URL(string: "https://github.com/ToThangGTVT/open-adblock-mac")!)
+            } header: {
+                SectionLabel("About", icon: "info.circle.fill", tint: Theme.slate)
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Settings")
+        .scrollContentBackground(.hidden)
     }
 }
 

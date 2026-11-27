@@ -6,8 +6,8 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .home: "Home"
-        case .log: "Query Log"
+        case .home: "Protection"
+        case .log: "Activity"
         case .filters: "Filters"
         case .browsers: "Browsers"
         case .settings: "Settings"
@@ -17,12 +17,15 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .home: "shield.lefthalf.filled"
-        case .log: "list.bullet.rectangle"
-        case .filters: "line.3.horizontal.decrease.circle"
-        case .browsers: "safari"
-        case .settings: "gearshape"
+        case .log: "waveform.path.ecg"
+        case .filters: "line.3.horizontal.decrease"
+        case .browsers: "globe"
+        case .settings: "gearshape.fill"
         }
     }
+
+    /// Every page uses the system accent color, like a native sidebar.
+    var tint: Color { Theme.accent }
 }
 
 struct ContentView: View {
@@ -35,16 +38,19 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             Sidebar(selection: highlighted, choose: choose)
-                .navigationSplitViewColumnWidth(min: 170, ideal: 190)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 220)
         } detail: {
-            switch page {
-            case .home: HomeView()
-            case .log: QueryLogView()
-            case .filters: FiltersView()
-            case .browsers: BrowsersView()
-            case .settings: SettingsView()
+            Group {
+                switch page {
+                case .home: HomeView()
+                case .log: QueryLogView()
+                case .filters: FiltersView()
+                case .browsers: BrowsersView()
+                case .settings: SettingsView()
+                }
             }
         }
+        .environment(\.navigate, choose)
     }
 
     private func choose(_ item: SidebarItem) {
@@ -67,17 +73,24 @@ private struct Sidebar: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(spacing: 2) {
-            ForEach(SidebarItem.allCases) { item in
-                Button { choose(item) } label: {
-                    SidebarRow(item: item, selected: item == selection, highlight: highlight)
+        VStack(alignment: .leading, spacing: 0) {
+            Brand()
+                .padding(.horizontal, 14)
+                .padding(.bottom, 18)
+
+            VStack(spacing: 3) {
+                ForEach(SidebarItem.allCases) { item in
+                    Button { choose(item) } label: {
+                        SidebarRow(item: item, selected: item == selection, highlight: highlight)
+                    }
+                    .buttonStyle(SidebarButtonStyle())
                 }
-                .buttonStyle(SidebarButtonStyle())
             }
+            .padding(.horizontal, 10)
+
             Spacer()
         }
-        .padding(.horizontal, 10)
-        .padding(.top, 6)
+        .padding(.top, 4)
         .focusable()
         .focused($focused)
         .focusEffectDisabled()
@@ -94,6 +107,21 @@ private struct Sidebar: View {
     }
 }
 
+/// App icon and name at the top of the sidebar.
+private struct Brand: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 34, height: 34)
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Open AdBlock").font(.system(size: 14, weight: .bold, design: .rounded))
+                Text("Privacy Protection").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
 private struct SidebarRow: View {
     let item: SidebarItem
     let selected: Bool
@@ -104,27 +132,31 @@ private struct SidebarRow: View {
     @State private var hovering = false
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Image(systemName: item.icon)
-                .font(.system(size: 15))
-                .frame(width: 20)
-                .foregroundStyle(selected && windowActive ? Color.white : Color.accentColor)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(selected && windowActive ? item.tint : .white)
+                .frame(width: 24, height: 24)
+                .background(
+                    selected && windowActive ? AnyShapeStyle(Color.white) : AnyShapeStyle(item.tint),
+                    in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                 .symbolEffect(.bounce, value: bounces)
             Text(item.title)
+                .fontWeight(selected ? .semibold : .regular)
                 .foregroundStyle(selected && windowActive ? Color.white : Color.primary)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             if selected {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(windowActive ? Color.accentColor : Color.primary.opacity(0.12))
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(windowActive ? Theme.accent : Color.primary.opacity(0.12))
                     .matchedGeometryEffect(id: "highlight", in: highlight)
             } else {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.primary.opacity(hovering ? 0.08 : 0))
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(Color.primary.opacity(hovering ? 0.07 : 0))
             }
         }
         .contentShape(Rectangle())
