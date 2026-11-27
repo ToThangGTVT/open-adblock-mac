@@ -39,11 +39,13 @@ SwiftUI app (user)                                  system extension (root)
   `SettingsStore`.
 - `PacketTunnel/` — `main.swift` starts system-extension mode; `PacketTunnelProvider` runs the
   core in packet mode; `FilterLists` downloads lists (refreshed daily); `EventStore` keeps the
-  query log and today's statistics.
+  query log and today's statistics; `EngineWatchdog` restarts the core when it stops or stops
+  taking packets, and gives the tunnel up (the Mac keeps its own network) when it cannot.
 - `Shared/` — settings, filter catalog and the app ↔ tunnel messages, compiled into both targets.
 - The extension runs as root, so it shares no files with the app. Settings travel in the VPN
   configuration (used when the system starts the tunnel) and in `apply` messages; the newest
-  `revision` wins. The extension keeps running when the app quits or crashes.
+  `revision` wins. Quitting the app stops protection and browser filtering; the next launch
+  turns protection back on if it was on. The extension keeps running if the app crashes.
 - The tunnel answers DNS at `172.19.0.2` / `fdfe:dcba:9876::2`, the virtual addresses the core
   recognises. The extension's own sockets bypass the tunnel and are bound to the physical
   interface.

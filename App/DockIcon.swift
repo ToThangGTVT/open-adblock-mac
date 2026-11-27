@@ -36,4 +36,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// With the Dock icon hidden, closing the window leaves the app in the menu bar.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    /// Work that must finish before the app exits (stopping the tunnel).
+    @MainActor static var beforeQuit: (@MainActor () async -> Void)?
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let beforeQuit = Self.beforeQuit else { return .terminateNow }
+        Task { @MainActor in
+            await beforeQuit()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
 }

@@ -37,8 +37,28 @@ final class TunnelManager: ObservableObject {
     private var observer: NSObjectProtocol?
     private var poller: Task<Void, Never>?
 
+    /// Whether protection was on when the app last quit; it turns on again at the next launch.
+    private static let resumeKey = "resumeProtectionOnLaunch"
+
     init() {
+        AppDelegate.beforeQuit = { [weak self] in await self?.stopForQuit() }
         Task { await load() }
+    }
+
+    /// The tunnel lives only as long as the app: quitting stops protection and browser filtering,
+    /// and the next launch turns protection back on if it was on.
+    private func stopForQuit() async {
+        UserDefaults.standard.set(state.isOn, forKey: Self.resumeKey)
+        let stopped: [NEVPNStatus] = [.disconnected, .invalid]
+        let connections = [manager?.connection, proxyManager?.connection]
+            .compactMap { $0 }
+            .filter { !stopped.contains($0.status) }
+        connections.forEach { $0.stopVPNTunnel() }
+        // The stop request is asynchronous: wait (briefly) until macOS acts on it, so it is not
+        // lost with the process.
+        for _ in 0..<30 where !connections.allSatisfy({ stopped.contains($0.status) }) {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
     }
 
     func load() async {
@@ -50,6 +70,9 @@ final class TunnelManager: ObservableObject {
             }
             observe()
             refreshState()
+            if manager != nil, state == .off, UserDefaults.standard.bool(forKey: Self.resumeKey) {
+                setEnabled(true, settings: settings)
+            }
         } catch {
             state = .failed(error.localizedDescription)
         }

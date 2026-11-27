@@ -29,6 +29,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var reading = false
     private let pathMonitor = NWPathMonitor()
     private var lastPath: Network.NWPath?
+    private var watchdog: EngineWatchdog?
 
     override func startTunnel(options: [String: NSObject]? = nil) async throws {
         guard let engine else {
@@ -40,12 +41,23 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         try await setTunnelNetworkSettings(networkSettings())
 
         engine.setEventListener(events)
-        let sink = FlowSink(flow: packetFlow)
-        guard engine.startPackets(protector: protector, dns: settings.upstream.ip, sink: sink) else {
+        guard startEngine(engine) else {
             throw NEVPNError(.connectionFailed)
         }
         startedAt = Date()
         reading = true
+        let watchdog = EngineWatchdog(
+            engine: engine,
+            restart: { [weak self] in
+                guard let self, self.reading else { return false }
+                engine.stop()
+                return self.startEngine(engine)
+            },
+            giveUp: { [weak self] in
+                self?.cancelTunnelWithError(NEVPNError(.connectionFailed))
+            })
+        self.watchdog = watchdog
+        watchdog.start()
         readPackets()
         watchNetwork()
         refreshLists(force: false)
@@ -54,6 +66,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     override func stopTunnel(with reason: NEProviderStopReason) async {
         reading = false
+        watchdog?.stop()
+        watchdog = nil
         pathMonitor.cancel()
         SharedState.shared.update(browsers: [], decrypting: false)
         engine?.stop()
@@ -204,10 +218,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         return network
     }
 
+    /// Starts the core's packet mode, writing its packets back to `packetFlow`. The rules,
+    /// policy and event listener live in the core across restarts.
+    private func startEngine(_ engine: NativeEngine) -> Bool {
+        engine.startPackets(
+            protector: protector, dns: settings.upstream.ip, sink: FlowSink(flow: packetFlow))
+    }
+
     private func readPackets() {
         packetFlow.readPackets { [weak self] packets, _ in
             guard let self, self.reading, let engine = self.engine else { return }
-            for packet in packets { engine.send(packet: packet) }
+            var accepted = 0
+            for packet in packets where engine.send(packet: packet) { accepted += 1 }
+            self.watchdog?.record(accepted: accepted, refused: packets.count - accepted)
             self.readPackets()
         }
     }
