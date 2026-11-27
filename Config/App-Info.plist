@@ -4,5 +4,15 @@
 <dict>
 	<key>OABAppGroup</key>
 	<string>$(OAB_APP_GROUP)</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/ToThangGTVT/open-adblock-mac/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>1C9+CJeQ69kubvAv0ykEeGFGDSjF9iN9NxE8HHNONXw=</string>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
 </dict>
 </plist>

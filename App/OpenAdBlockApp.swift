@@ -2,10 +2,12 @@ import SwiftUI
 
 @main
 struct OpenAdBlockApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var tunnel = TunnelManager()
     @StateObject private var store = SettingsStore()
     @StateObject private var installer = ExtensionInstaller()
     @StateObject private var catalogs = CatalogStore()
+    @StateObject private var updater = Updater()
 
     var body: some Scene {
         WindowGroup("Open AdBlock", id: "main") {
@@ -14,6 +16,7 @@ struct OpenAdBlockApp: App {
                 .environmentObject(store)
                 .environmentObject(installer)
                 .environmentObject(catalogs)
+                .environmentObject(updater)
                 .frame(minWidth: 760, minHeight: 520)
                 .task {
                     store.onChange = { tunnel.apply($0) }
@@ -28,6 +31,7 @@ struct OpenAdBlockApp: App {
             MenuBarContent()
                 .environmentObject(tunnel)
                 .environmentObject(store)
+                .environmentObject(updater)
         } label: {
             Image(systemName: tunnel.state.isOn ? "shield.lefthalf.filled" : "shield.slash")
         }
@@ -37,6 +41,7 @@ struct OpenAdBlockApp: App {
 private struct MenuBarContent: View {
     @EnvironmentObject private var tunnel: TunnelManager
     @EnvironmentObject private var store: SettingsStore
+    @EnvironmentObject private var updater: Updater
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -51,6 +56,10 @@ private struct MenuBarContent: View {
         Button("Open Open AdBlock") {
             openWindow(id: "main")
             NSApp.activate(ignoringOtherApps: true)
+        }
+        if updater.isConfigured {
+            Button("Check for Updates…") { updater.checkForUpdates() }
+                .disabled(!updater.canCheckForUpdates)
         }
         Divider()
         Button("Quit") { NSApp.terminate(nil) }
