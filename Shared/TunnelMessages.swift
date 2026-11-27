@@ -26,6 +26,14 @@ struct LogEntry: Codable, Identifiable, Hashable {
     var rule: String?
     var cached: Bool
     var kind: String
+    /// Path of an inspected HTTPS request; nil for DNS answers and other connections.
+    var path: String?
+
+    /// `https://domain/path` for inspected requests, otherwise the domain alone.
+    var url: String {
+        guard let path else { return domain }
+        return "https://\(domain)\(path)"
+    }
 }
 
 struct DomainCount: Codable, Hashable, Identifiable {

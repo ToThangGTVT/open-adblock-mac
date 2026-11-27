@@ -18,7 +18,7 @@ struct QueryLogView: View {
             case .allowed: !entry.blocked
             }
         }
-        .filter { search.isEmpty || $0.domain.localizedCaseInsensitiveContains(search) }
+        .filter { search.isEmpty || $0.url.localizedCaseInsensitiveContains(search) }
     }
 
     var body: some View {
@@ -37,8 +37,8 @@ struct QueryLogView: View {
                             .monospacedDigit().foregroundStyle(.secondary)
                     }
                     .width(80)
-                    TableColumn("Domain") { entry in
-                        Text(entry.domain).lineLimit(1).truncationMode(.middle)
+                    TableColumn("URL") { entry in
+                        Text(entry.url).lineLimit(1).truncationMode(.middle).help(entry.url)
                     }
                     TableColumn("Status") { entry in
                         Label(
@@ -55,7 +55,7 @@ struct QueryLogView: View {
             }
         }
         .navigationTitle("Query Log")
-        .searchable(text: $search, prompt: "Domain")
+        .searchable(text: $search, prompt: "URL")
         .toolbar {
             Picker("Show", selection: $filter) {
                 ForEach(Filter.allCases) { Text($0.rawValue).tag($0) }

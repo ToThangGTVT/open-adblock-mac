@@ -12,6 +12,7 @@ final class EventStore: EngineEventListener, @unchecked Sendable {
             var matchedRule: String?
             var cached: Bool
             var `protocol`: String
+            var path: String?
         }
         struct Total: Decodable {
             var timestamp: Double
@@ -59,7 +60,7 @@ final class EventStore: EngineEventListener, @unchecked Sendable {
                 LogEntry(
                     timestamp: Date(timeIntervalSince1970: event.timestamp / 1000), domain: event.domain,
                     blocked: event.blocked, rule: event.matchedRule, cached: event.cached,
-                    kind: event.protocol))
+                    kind: event.protocol, path: event.path))
             if event.blocked { today.blockedDomains[event.domain, default: 0] += 1 }
         }
         if log.count > Self.logLimit { log.removeFirst(log.count - Self.logLimit) }
