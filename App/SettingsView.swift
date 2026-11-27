@@ -5,7 +5,7 @@ struct SettingsView: View {
     @EnvironmentObject private var tunnel: TunnelManager
     @EnvironmentObject private var updater: Updater
     @AppStorage(DockIcon.hiddenKey) private var hideDockIcon = true
-    @StateObject private var launchAtLogin = LaunchAtLogin()
+    @EnvironmentObject private var launchAtLogin: LaunchAtLogin
 
     var body: some View {
         Form {

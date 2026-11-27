@@ -108,13 +108,22 @@ struct BrowsersView: View {
             trusted = false
             return
         }
-        trusted = CertificateTrust.isTrusted(certificate)
         let fingerprint = CertificateTrust.fingerprint(certificate)
-        // Record the verified CA, or forget one the user removed in Keychain Access.
-        if trusted, store.settings.https.trustedCA != fingerprint {
-            store.settings.https.trustedCA = fingerprint
-        } else if !trusted, store.settings.https.trustedCA == fingerprint {
-            store.settings.https.trustedCA = nil
+        // Show the last verified answer at once; trust evaluation can block (Apple advises
+        // against it on the main thread), so the fresh answer comes from a background task.
+        trusted = store.settings.https.trustedCA == fingerprint
+        Task {
+            let isTrusted = await Task.detached(priority: .userInitiated) {
+                CertificateTrust.isTrusted(certificate)
+            }.value
+            guard self.certificate == certificate else { return }
+            trusted = isTrusted
+            // Record the verified CA, or forget one the user removed in Keychain Access.
+            if isTrusted, store.settings.https.trustedCA != fingerprint {
+                store.settings.https.trustedCA = fingerprint
+            } else if !isTrusted, store.settings.https.trustedCA == fingerprint {
+                store.settings.https.trustedCA = nil
+            }
         }
     }
 
@@ -133,10 +142,8 @@ struct BrowsersView: View {
 private struct BrowserRow: View {
     @EnvironmentObject private var store: SettingsStore
     let browser: KnownBrowser
-
-    private var installed: Bool {
-        NSWorkspace.shared.urlForApplication(withBundleIdentifier: browser.id) != nil
-    }
+    @State private var icon: NSImage?
+    @State private var installed = true
 
     var body: some View {
         Toggle(
@@ -145,15 +152,21 @@ private struct BrowserRow: View {
                 set: { store.setBrowser(browser.id, enabled: $0) })
         ) {
             HStack {
-                if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: browser.id) {
-                    Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
-                        .resizable().frame(width: 20, height: 20)
+                if let icon {
+                    Image(nsImage: icon).resizable().frame(width: 20, height: 20)
                 }
                 Text(browser.name)
                 if !installed {
                     Text("not installed").font(.caption).foregroundStyle(.tertiary)
                 }
             }
+        }
+        // Looked up once per appearance, not on every redraw (the status redraws this view every
+        // two seconds while protection is on).
+        .onAppear {
+            let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: browser.id)
+            installed = url != nil
+            icon = url.map { NSWorkspace.shared.icon(forFile: $0.path) }
         }
     }
 }

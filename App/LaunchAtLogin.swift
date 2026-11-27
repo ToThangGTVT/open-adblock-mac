@@ -12,8 +12,16 @@ final class LaunchAtLogin: ObservableObject {
 
     init() { refresh() }
 
+    /// Reads the state off the main thread: it is an XPC round trip to the system, which would
+    /// otherwise stall the window (opening Settings, or the app becoming active).
     func refresh() {
-        let status = SMAppService.mainApp.status
+        Task {
+            let status = await Task.detached(priority: .userInitiated) { SMAppService.mainApp.status }.value
+            apply(status)
+        }
+    }
+
+    private func apply(_ status: SMAppService.Status) {
         enabled = status == .enabled
         needsApproval = status == .requiresApproval
     }
@@ -29,7 +37,7 @@ final class LaunchAtLogin: ObservableObject {
         } catch {
             self.error = error.localizedDescription
         }
-        refresh()
+        apply(SMAppService.mainApp.status)
     }
 
     func openLoginItemsSettings() {

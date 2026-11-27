@@ -43,7 +43,7 @@ struct ListStatus: Codable, Hashable, Identifiable {
     var error: String?
 }
 
-struct TunnelStatus: Codable {
+struct TunnelStatus: Codable, Equatable {
     var engineVersion: String
     var rulesLoaded: Int
     var ruleErrors: Int

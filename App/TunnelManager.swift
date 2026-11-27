@@ -327,8 +327,13 @@ final class TunnelManager: ObservableObject {
                 continuation.resume(returning: nil)
             }
         }
-        if let reply, let status = try? JSONDecoder().decode(TunnelStatus.self, from: reply) {
-            self.status = status
+        // The reply carries up to 500 log entries: decode it off the main thread, and publish only
+        // a change, since every published status redraws each view that observes the tunnel.
+        let decoded = await Task.detached(priority: .userInitiated) {
+            reply.flatMap { try? JSONDecoder().decode(TunnelStatus.self, from: $0) }
+        }.value
+        if let decoded {
+            if decoded != status { status = decoded }
             syncBrowserProxy()
         }
     }

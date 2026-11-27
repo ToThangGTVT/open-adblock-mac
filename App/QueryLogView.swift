@@ -10,7 +10,7 @@ struct QueryLogView: View {
     @State private var filter: Filter = .all
     @State private var search = ""
 
-    private var entries: [LogEntry] {
+    private func entries() -> [LogEntry] {
         (tunnel.status?.recent ?? []).filter { entry in
             switch filter {
             case .all: true
@@ -22,6 +22,7 @@ struct QueryLogView: View {
     }
 
     var body: some View {
+        let entries = entries()
         Group {
             if tunnel.state != .on {
                 ContentUnavailableView(
