@@ -79,17 +79,24 @@ private final class FlowBridge: @unchecked Sendable {
             host: .ipv4(.loopback), port: NWEndpoint.Port(rawValue: proxyPort)!, using: .tcp)
     }
 
+    /// The bridge keeps itself alive through the handlers it gives `connection` and `flow`;
+    /// `finish` cancels both sides so every pending callback returns and the cycle ends.
     func start() {
         connection.stateUpdateHandler = { [self] state in
             switch state {
             case .ready:
                 connection.stateUpdateHandler = { [self] state in
-                    if case .failed = state { finish() }
+                    switch state {
+                    case .failed, .waiting: finish()
+                    default: break
+                    }
                 }
                 connection.send(content: header, completion: .contentProcessed { [self] error in
                     error == nil ? openFlow() : finish()
                 })
-            case .failed, .cancelled:
+            // A refused loopback connect (core proxy gone, e.g. the tunnel stopped) parks a TCP
+            // NWConnection in .waiting and retries forever, holding the browser flow open.
+            case .failed, .waiting, .cancelled:
                 finish()
             default:
                 break
@@ -153,6 +160,8 @@ private final class FlowBridge: @unchecked Sendable {
     private func finish() {
         guard !finished else { return }
         finished = true
+        // Drop the handler (it captures self) instead of relying on Network framework to release it.
+        connection.stateUpdateHandler = nil
         connection.cancel()
         flow.closeReadWithError(nil)
         flow.closeWriteWithError(nil)
